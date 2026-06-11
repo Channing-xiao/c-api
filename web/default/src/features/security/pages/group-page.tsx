@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { securityApi, type SecurityGroup } from '../api/security'
+import { SecurityPageLayout } from '../components/security-page-layout'
 import { GroupFormModal } from '../components/group-form-modal'
 
 export function SecurityGroupPage() {
@@ -12,6 +15,9 @@ export function SecurityGroupPage() {
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<SecurityGroup | null>(null)
+  const [migrationDismissed, setMigrationDismissed] = useState(() => {
+    return localStorage.getItem('security_migration_dismissed') === '1'
+  })
 
   useEffect(() => {
     loadGroups()
@@ -27,9 +33,20 @@ export function SecurityGroupPage() {
     })
   }
 
-  const handleDelete = (id: number) => {
+  const dismissMigration = () => {
+    localStorage.setItem('security_migration_dismissed', '1')
+    setMigrationDismissed(true)
+  }
+
+  const handleDelete = async (id: number) => {
     if (!confirm(t('Are you sure?'))) return
-    securityApi.deleteGroup(id).then(() => loadGroups())
+    try {
+      await securityApi.deleteGroup(id)
+      toast.success(t('Group deleted'))
+      loadGroups()
+    } catch {
+      toast.error(t('Failed to delete group'))
+    }
   }
 
   const handleCreate = () => {
@@ -43,22 +60,47 @@ export function SecurityGroupPage() {
   }
 
   const handleSubmit = async (data: Partial<SecurityGroup>) => {
-    if (editingGroup) {
-      await securityApi.updateGroup(editingGroup.id, data)
-    } else {
-      await securityApi.createGroup(data)
+    try {
+      if (editingGroup) {
+        await securityApi.updateGroup(editingGroup.id, data)
+        toast.success(t('Group updated'))
+      } else {
+        await securityApi.createGroup(data)
+        toast.success(t('Group created'))
+      }
+      loadGroups()
+    } catch {
+      toast.error(t('Failed to save group'))
     }
-    loadGroups()
   }
 
-  if (loading) return <div className="p-6">{t('Loading...')}</div>
+  if (loading) {
+    return (
+      <SecurityPageLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </SecurityPageLayout>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('Sensitive Word Groups')}</h1>
-        <Button onClick={handleCreate}>{t('Create Group')}</Button>
-      </div>
+    <SecurityPageLayout
+      actions={<Button onClick={handleCreate}>{t('Create Group')}</Button>}
+    >
+      <div className="space-y-4">
+      {!migrationDismissed && (
+        <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-4">
+          <div className="text-sm">
+            <span className="font-medium">{t('System Migration')}</span>{' '}
+            {t('The legacy Sensitive Words system has been consolidated into the new AI Content Security module.')}
+          </div>
+          <Button variant="ghost" size="sm" onClick={dismissMigration}>
+            {t('Dismiss')}
+          </Button>
+        </div>
+      )}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -96,6 +138,7 @@ export function SecurityGroupPage() {
         groups={groups}
         onSubmit={handleSubmit}
       />
-    </div>
+      </div>
+    </SecurityPageLayout>
   )
 }

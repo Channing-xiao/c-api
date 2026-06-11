@@ -44,6 +44,7 @@ type SecurityUserPolicy struct {
 	DefaultAction  int    `json:"default_action" gorm:"column:default_action;type:int;default:3"`
 	CustomResponse string `json:"custom_response" gorm:"column:custom_response;type:text;default:null"`
 	WhitelistIPs   string `json:"whitelist_ips" gorm:"column:whitelist_ips;type:text;default:null"`
+	Priority       int    `json:"priority" gorm:"column:priority;type:int;default:0;index:idx_security_policy_priority"`
 	Status         int    `json:"status" gorm:"column:status;type:int;default:1;index:idx_security_policy_status"`
 	CreatedAt      int64  `json:"created_at" gorm:"column:created_at;type:bigint;default:0"`
 	UpdatedAt      int64  `json:"updated_at" gorm:"column:updated_at;type:bigint;default:0"`

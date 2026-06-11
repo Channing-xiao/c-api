@@ -145,7 +145,7 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Security'),
             url: '/security',
-            activeUrls: ['/security'],
+            activeUrls: ['/security', '/security/*'],
             icon: ShieldAlert,
           },
           {

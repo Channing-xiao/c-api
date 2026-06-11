@@ -42,7 +42,7 @@ func GetSecurityPolicies(page, pageSize int, userID int, status int) ([]*model.S
 		return nil, 0, err
 	}
 
-	err = db.Order("security_user_policies.id DESC").
+	err = db.Order("security_user_policies.priority ASC, security_user_policies.id DESC").
 		Offset((page - 1) * pageSize).Limit(pageSize).Find(&policies).Error
 	if err != nil {
 		return nil, 0, err
@@ -78,6 +78,7 @@ func CreateSecurityPolicy(req *dto.SecurityPolicyRequest) (*model.SecurityUserPo
 		DefaultAction:  req.DefaultAction,
 		CustomResponse: req.CustomResponse,
 		WhitelistIPs:   req.WhitelistIPs,
+		Priority:       req.Priority,
 		Status:         constant.SecurityStatusEnabled,
 		CreatedAt:      time.Now().Unix(),
 		UpdatedAt:      time.Now().Unix(),
@@ -104,6 +105,7 @@ func UpdateSecurityPolicy(id int64, req *dto.SecurityPolicyRequest) error {
 		"default_action":  req.DefaultAction,
 		"custom_response": req.CustomResponse,
 		"whitelist_ips":   req.WhitelistIPs,
+		"priority":        req.Priority,
 		"updated_at":      time.Now().Unix(),
 	}
 

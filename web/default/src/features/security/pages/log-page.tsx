@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { securityApi, type SecurityHitLog } from '../api/security'
+import { SecurityPageLayout } from '../components/security-page-layout'
 import { LogDetailDrawer } from '../components/log-detail-drawer'
+
+const POLLING_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
 const actionMap: Record<number, string> = {
   1: 'Pass',
@@ -28,13 +34,56 @@ export function SecurityLogPage() {
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<SecurityHitLog | null>(null)
+  const [modelName, setModelName] = useState('')
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const pollingStartTime = useRef<number | null>(null)
 
   useEffect(() => {
     loadLogs()
-  }, [])
+    let interval: ReturnType<typeof setInterval>
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        clearInterval(interval)
+      } else if (autoRefresh) {
+        interval = setInterval(() => loadLogs(), 5000)
+      }
+    }
+
+    if (autoRefresh) {
+      if (pollingStartTime.current == null) {
+        pollingStartTime.current = Date.now()
+      }
+      interval = setInterval(() => {
+        if (pollingStartTime.current && Date.now() - pollingStartTime.current > POLLING_TIMEOUT_MS) {
+          setAutoRefresh(false)
+          pollingStartTime.current = null
+          toast.info(t('Auto-refresh paused after 30 minutes'))
+          clearInterval(interval)
+          return
+        }
+        loadLogs()
+      }, 5000)
+    } else {
+      pollingStartTime.current = null
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [autoRefresh])
 
   const loadLogs = () => {
-    securityApi.getLogs({ page: 1, page_size: 100 }).then((res: any) => {
+    const params: Record<string, any> = { page: 1, page_size: 100 }
+    if (modelName) params.model_name = modelName
+    if (startTime) params.start_time = Math.floor(new Date(startTime).getTime() / 1000)
+    if (endTime) params.end_time = Math.floor(new Date(endTime).getTime() / 1000)
+
+    securityApi.getLogs(params).then((res: any) => {
       if (res.success) {
         setLogs(res.data.items)
       }
@@ -44,7 +93,11 @@ export function SecurityLogPage() {
 
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
-      const res = await securityApi.exportLogs({ format })
+      const params: Record<string, any> = { format }
+      if (modelName) params.model_name = modelName
+      if (startTime) params.start_time = Math.floor(new Date(startTime).getTime() / 1000)
+      if (endTime) params.end_time = Math.floor(new Date(endTime).getTime() / 1000)
+      const res = await securityApi.exportLogs(params)
       const blob = new Blob([res.data], {
         type:
           format === 'excel'
@@ -60,7 +113,7 @@ export function SecurityLogPage() {
       a.remove()
       URL.revokeObjectURL(url)
     } catch {
-      alert(t('Export failed'))
+      toast.error(t('Export failed'))
     }
   }
 
@@ -69,21 +122,69 @@ export function SecurityLogPage() {
     setDrawerOpen(true)
   }
 
-  if (loading) return <div className="p-6">{t('Loading...')}</div>
+  if (loading) {
+    return (
+      <SecurityPageLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </SecurityPageLayout>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('Audit Logs')}</h1>
-        <div className="flex items-center gap-2">
+    <SecurityPageLayout
+      actions={
+        <>
+          <Button
+            variant={autoRefresh ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setAutoRefresh((v) => !v)}
+          >
+            {autoRefresh ? t('Auto Refresh: ON') : t('Auto Refresh: OFF')}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
             {t('Export CSV')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport('excel')}>
             {t('Export Excel')}
           </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            placeholder={t('Model name')}
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            className="w-48"
+          />
+          <Input
+            type="datetime-local"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="w-56"
+          />
+          <Input
+            type="datetime-local"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            className="w-56"
+          />
+          <Button size="sm" onClick={loadLogs}>{t('Apply')}</Button>
+          <Button variant="outline" size="sm" onClick={() => {
+            setModelName('')
+            setStartTime('')
+            setEndTime('')
+            securityApi.getLogs({ page: 1, page_size: 100 }).then((res: any) => {
+              if (res.success) setLogs(res.data.items)
+            })
+          }}>
+            {t('Reset')}
+          </Button>
         </div>
-      </div>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -127,6 +228,7 @@ export function SecurityLogPage() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
-    </div>
+      </div>
+    </SecurityPageLayout>
   )
 }

@@ -207,6 +207,55 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	return result, nil
 }
 
+// DetectWithRule 使用单条规则检测内容（用于规则测试）
+func (de *DetectionEngine) DetectWithRule(rule *model.SecurityRule, content string) (*DetectionResult, error) {
+	result := &DetectionResult{
+		Detected:      false,
+		Action:        constant.SecurityActionPass,
+		RiskScore:     0,
+		EngineResults: make(map[string]*EngineResult),
+		Matches:       make([]*dto.SecurityMatchResult, 0),
+	}
+
+	if rule == nil || rule.Status != constant.SecurityStatusEnabled {
+		return result, nil
+	}
+
+	// 根据规则类型选择检测器
+	var detector ContentDetector
+	switch rule.Type {
+	case constant.SecurityRuleTypeKeyword:
+		detector = de.detectors[0] // KeywordDetector
+	case constant.SecurityRuleTypeRegex:
+		detector = de.detectors[1] // RegexDetector
+	case constant.SecurityRuleTypeNER:
+		detector = de.detectors[2] // NERDetector
+	case constant.SecurityRuleTypeAI:
+		detector = de.detectors[3] // AIDetector
+	default:
+		return result, nil
+	}
+
+	engineResult, err := detector.Detect(content, []*model.SecurityRule{rule})
+	if err != nil {
+		return result, err
+	}
+
+	result.EngineResults[detector.Name()] = engineResult
+	if engineResult.Detected {
+		result.Detected = true
+		result.RiskScore = engineResult.RiskScore
+		result.RiskLevel = constant.GetSecurityRiskLevelByScore(engineResult.RiskScore)
+		result.Matches = engineResult.Matches
+		result.Action = rule.Action
+		if result.Action == constant.SecurityActionMask {
+			result.ProcessedContent = applyMasking(content, result.Matches, []*model.SecurityRule{rule})
+		}
+	}
+
+	return result, nil
+}
+
 // resolveAction 根据匹配结果解析最终动作（取最高优先级）
 func resolveAction(matches []*dto.SecurityMatchResult, rules []*model.SecurityRule) int {
 	if len(matches) == 0 {

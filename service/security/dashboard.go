@@ -40,6 +40,11 @@ func GetSecurityDashboard(startTime, endTime int64) (*dto.SecurityDashboardRespo
 	model.DB.Model(&model.SecurityHitLog{}).Where("created_at >= ?", todayStart).Count(&todayDetections)
 	response.Summary.TodayDetections = int(todayDetections)
 
+	// 今日拦截数
+	var todayInterceptions int64
+	model.DB.Model(&model.SecurityHitLog{}).Where("created_at >= ? AND action = ?", todayStart, constant.SecurityActionBlock).Count(&todayInterceptions)
+	response.Summary.TodayInterceptions = int(todayInterceptions)
+
 	// TOP 分类
 	type CategoryCount struct {
 		Category string

@@ -64,6 +64,7 @@ type SecurityPolicyRequest struct {
 	DefaultAction  int    `json:"default_action" binding:"oneof=1 2 3 4 5"`
 	CustomResponse string `json:"custom_response"`
 	WhitelistIPs   string `json:"whitelist_ips"`
+	Priority       int    `json:"priority"`
 }
 
 type SecurityPolicyResponse struct {
@@ -76,6 +77,7 @@ type SecurityPolicyResponse struct {
 	DefaultAction  int       `json:"default_action"`
 	CustomResponse string    `json:"custom_response"`
 	WhitelistIPs   string    `json:"whitelist_ips"`
+	Priority       int       `json:"priority"`
 	Status         int       `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
@@ -128,10 +130,11 @@ type SecurityDashboardRequest struct {
 
 type SecurityDashboardResponse struct {
 	Summary struct {
-		TotalDetections    int `json:"total_detections"`
-		TotalInterceptions int `json:"total_interceptions"`
-		TotalAlerts        int `json:"total_alerts"`
-		TodayDetections    int `json:"today_detections"`
+		TotalDetections     int `json:"total_detections"`
+		TotalInterceptions  int `json:"total_interceptions"`
+		TotalAlerts         int `json:"total_alerts"`
+		TodayDetections     int `json:"today_detections"`
+		TodayInterceptions  int `json:"today_interceptions"`
 	} `json:"summary"`
 	TopCategories []struct {
 		Category string `json:"category"`

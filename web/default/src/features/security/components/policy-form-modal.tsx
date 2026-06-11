@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { TagInput } from '@/components/tag-input'
 import type { SecurityGroup, SecurityPolicy } from '../api/security'
 
 interface PolicyFormModalProps {
@@ -57,6 +58,7 @@ export function PolicyFormModal({
     default_action: 1,
     custom_response: '',
     whitelist_ips: '',
+    priority: 50,
   })
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export function PolicyFormModal({
               default_action: initialData.default_action,
               custom_response: initialData.custom_response,
               whitelist_ips: initialData.whitelist_ips,
+              priority: initialData.priority ?? 50,
             }
           : {
               user_id: 0,
@@ -78,6 +81,7 @@ export function PolicyFormModal({
               default_action: 4,
               custom_response: '',
               whitelist_ips: '',
+              priority: 50,
             }
       )
     }
@@ -197,15 +201,27 @@ export function PolicyFormModal({
               />
             </div>
 
+            <div className='space-y-2'>
+              <Label htmlFor='policy-priority'>{t('Priority')}</Label>
+              <Input
+                id='policy-priority'
+                type='number'
+                min={1}
+                max={100}
+                value={form.priority ?? 50}
+                onChange={(e) =>
+                  setForm({ ...form, priority: Number(e.target.value) })
+                }
+                placeholder={t('1-100')}
+              />
+            </div>
+
             <div className='space-y-2 sm:col-span-2'>
               <Label htmlFor='policy-whitelist'>{t('Whitelist IPs')}</Label>
-              <Input
-                id='policy-whitelist'
-                value={form.whitelist_ips}
-                onChange={(e) =>
-                  setForm({ ...form, whitelist_ips: e.target.value })
-                }
-                placeholder={t('Comma separated IPs')}
+              <TagInput
+                value={form.whitelist_ips ? form.whitelist_ips.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean) : []}
+                onChange={(tags) => setForm({ ...form, whitelist_ips: tags.join(',') })}
+                placeholder={t('Enter IP and press Enter')}
               />
             </div>
           </div>

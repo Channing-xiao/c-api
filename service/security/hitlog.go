@@ -16,6 +16,9 @@ type SecurityLogQueryParams struct {
 	Action      int
 	RiskLevel   int
 	ContentType int
+	StartTime   int64
+	EndTime     int64
+	ModelName   string
 }
 
 // GetSecurityLogs 获取安全日志列表（通过 service 层）
@@ -41,6 +44,15 @@ func GetSecurityLogs(params SecurityLogQueryParams) ([]*model.SecurityHitLogWith
 	if params.ContentType > 0 {
 		db = db.Where("security_hit_logs.content_type = ?", params.ContentType)
 	}
+	if params.StartTime > 0 {
+		db = db.Where("security_hit_logs.created_at >= ?", params.StartTime)
+	}
+	if params.EndTime > 0 {
+		db = db.Where("security_hit_logs.created_at <= ?", params.EndTime)
+	}
+	if params.ModelName != "" {
+		db = db.Where("security_hit_logs.model_name LIKE ?", "%"+params.ModelName+"%")
+	}
 
 	err := db.Count(&count).Error
 	if err != nil {
@@ -65,6 +77,9 @@ type ExportSecurityLogParams struct {
 	Action      int
 	RiskLevel   int
 	ContentType int
+	StartTime   int64
+	EndTime     int64
+	ModelName   string
 }
 
 // GetSecurityLogsForExport 获取需要导出的安全日志
@@ -88,6 +103,15 @@ func GetSecurityLogsForExport(params ExportSecurityLogParams) ([]*model.Security
 	}
 	if params.ContentType > 0 {
 		db = db.Where("security_hit_logs.content_type = ?", params.ContentType)
+	}
+	if params.StartTime > 0 {
+		db = db.Where("security_hit_logs.created_at >= ?", params.StartTime)
+	}
+	if params.EndTime > 0 {
+		db = db.Where("security_hit_logs.created_at <= ?", params.EndTime)
+	}
+	if params.ModelName != "" {
+		db = db.Where("security_hit_logs.model_name LIKE ?", "%"+params.ModelName+"%")
 	}
 
 	err := db.Order("security_hit_logs.id DESC").Find(&logs).Error

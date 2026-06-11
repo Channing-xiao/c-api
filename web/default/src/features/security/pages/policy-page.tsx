@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { securityApi, type SecurityGroup, type SecurityPolicy } from '../api/security'
+import { SecurityPageLayout } from '../components/security-page-layout'
 import { PolicyFormModal } from '../components/policy-form-modal'
 
 const scopeMap: Record<number, string> = {
@@ -46,9 +49,15 @@ export function SecurityPolicyPage() {
     })
   }
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     if (!confirm(t('Are you sure?'))) return
-    securityApi.deletePolicy(id).then(() => loadPolicies())
+    try {
+      await securityApi.deletePolicy(id)
+      toast.success(t('Policy deleted'))
+      loadPolicies()
+    } catch {
+      toast.error(t('Failed to delete policy'))
+    }
   }
 
   const handleCreate = () => {
@@ -62,22 +71,36 @@ export function SecurityPolicyPage() {
   }
 
   const handleSubmit = async (data: Partial<SecurityPolicy>) => {
-    if (editingPolicy) {
-      await securityApi.updatePolicy(editingPolicy.id, data)
-    } else {
-      await securityApi.createPolicy(data)
+    try {
+      if (editingPolicy) {
+        await securityApi.updatePolicy(editingPolicy.id, data)
+        toast.success(t('Policy updated'))
+      } else {
+        await securityApi.createPolicy(data)
+        toast.success(t('Policy created'))
+      }
+      loadPolicies()
+    } catch {
+      toast.error(t('Failed to save policy'))
     }
-    loadPolicies()
   }
 
-  if (loading) return <div className="p-6">{t('Loading...')}</div>
+  if (loading) {
+    return (
+      <SecurityPageLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </SecurityPageLayout>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('Security Policies')}</h1>
-        <Button onClick={handleCreate}>{t('Create Policy')}</Button>
-      </div>
+    <SecurityPageLayout
+      actions={<Button onClick={handleCreate}>{t('Create Policy')}</Button>}
+    >
+      <div className="space-y-4">
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -87,6 +110,7 @@ export function SecurityPolicyPage() {
                 <TableHead>{t('Group')}</TableHead>
                 <TableHead>{t('Scope')}</TableHead>
                 <TableHead>{t('Default Action')}</TableHead>
+                <TableHead>{t('Priority')}</TableHead>
                 <TableHead className="text-right">{t('Actions')}</TableHead>
               </TableRow>
             </TableHeader>
@@ -97,6 +121,7 @@ export function SecurityPolicyPage() {
                   <TableCell>{policy.group_name}</TableCell>
                   <TableCell><Badge variant="outline">{scopeMap[policy.scope] ?? policy.scope}</Badge></TableCell>
                   <TableCell><Badge>{actionMap[policy.default_action] ?? policy.default_action}</Badge></TableCell>
+                  <TableCell>{policy.priority ?? 0}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleEdit(policy)}>{t('Edit')}</Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(policy.id)}>
@@ -117,6 +142,7 @@ export function SecurityPolicyPage() {
         groups={groups}
         onSubmit={handleSubmit}
       />
-    </div>
+      </div>
+    </SecurityPageLayout>
   )
 }

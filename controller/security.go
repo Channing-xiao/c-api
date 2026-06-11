@@ -21,8 +21,9 @@ func GetSecurityGroups(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	status, _ := strconv.Atoi(c.DefaultQuery("status", "-1"))
 	parentID, _ := strconv.ParseInt(c.DefaultQuery("parent_id", "-1"), 10, 64)
+	name := c.DefaultQuery("name", "")
 
-	groups, total, err := security.GetSecurityGroups(page, pageSize, status, parentID)
+	groups, total, err := security.GetSecurityGroups(page, pageSize, status, parentID, name)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -255,6 +256,9 @@ func GetSecurityLogs(c *gin.Context) {
 	action, _ := strconv.Atoi(c.DefaultQuery("action", "0"))
 	riskLevel, _ := strconv.Atoi(c.DefaultQuery("risk_level", "0"))
 	contentType, _ := strconv.Atoi(c.DefaultQuery("content_type", "0"))
+	startTime, _ := strconv.ParseInt(c.DefaultQuery("start_time", "0"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.DefaultQuery("end_time", "0"), 10, 64)
+	modelName := c.DefaultQuery("model_name", "")
 
 	logs, count, err := security.GetSecurityLogs(security.SecurityLogQueryParams{
 		Page:        page,
@@ -263,6 +267,9 @@ func GetSecurityLogs(c *gin.Context) {
 		Action:      action,
 		RiskLevel:   riskLevel,
 		ContentType: contentType,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		ModelName:   modelName,
 	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
@@ -287,6 +294,9 @@ func ExportSecurityLogs(c *gin.Context) {
 	action, _ := strconv.Atoi(c.DefaultQuery("action", "0"))
 	riskLevel, _ := strconv.Atoi(c.DefaultQuery("risk_level", "0"))
 	contentType, _ := strconv.Atoi(c.DefaultQuery("content_type", "0"))
+	startTime, _ := strconv.ParseInt(c.DefaultQuery("start_time", "0"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.DefaultQuery("end_time", "0"), 10, 64)
+	modelName := c.DefaultQuery("model_name", "")
 
 	logs, err := security.GetSecurityLogsForExport(security.ExportSecurityLogParams{
 		Format:      format,
@@ -294,6 +304,9 @@ func ExportSecurityLogs(c *gin.Context) {
 		Action:      action,
 		RiskLevel:   riskLevel,
 		ContentType: contentType,
+		StartTime:   startTime,
+		EndTime:     endTime,
+		ModelName:   modelName,
 	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
@@ -412,6 +425,126 @@ func CheckSecurityResponse(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": result,
+	})
+}
+
+// ========== 规则测试与批量操作 ==========
+
+func TestSecurityRule(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	result, err := security.TestSecurityRule(id, req.Content)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	actionName := "pass"
+	switch result.Action {
+	case constant.SecurityActionAlert:
+		actionName = "alert"
+	case constant.SecurityActionMask:
+		actionName = "mask"
+	case constant.SecurityActionBlock:
+		actionName = "block"
+	case constant.SecurityActionReview:
+		actionName = "review"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"detected":          result.Detected,
+			"action":            result.Action,
+			"action_name":       actionName,
+			"risk_score":        result.RiskScore,
+			"risk_level":        result.RiskLevel,
+			"processed_content": result.ProcessedContent,
+			"matches":           result.Matches,
+		},
+	})
+}
+
+func UpdateSecurityRuleStatus(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var req struct {
+		Status int `json:"status" binding:"oneof=0 1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := security.UpdateSecurityRuleStatus(id, req.Status); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	security.CreateAuditLog(c.GetInt("id"), "update_status", "security_rule", id, nil, req)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "状态更新成功"})
+}
+
+func BatchDeleteSecurityRules(c *gin.Context) {
+	var req struct {
+		IDs []int64 `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := security.BatchDeleteSecurityRules(req.IDs); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	security.CreateAuditLog(c.GetInt("id"), "batch_delete", "security_rule", 0, nil, req)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "批量删除成功"})
+}
+
+func BatchUpdateSecurityRuleStatus(c *gin.Context) {
+	var req struct {
+		IDs    []int64 `json:"ids" binding:"required"`
+		Status int     `json:"status" binding:"oneof=0 1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := security.BatchUpdateSecurityRuleStatus(req.IDs, req.Status); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	security.CreateAuditLog(c.GetInt("id"), "batch_status", "security_rule", 0, nil, req)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "批量状态更新成功"})
+}
+
+// ========== 迁移状态 ==========
+
+func GetSecurityMigrationStatus(c *gin.Context) {
+	// 检查是否已有安全分组数据（作为迁移完成的标志）
+	var count int64
+	model.DB.Model(&model.SecurityGroup{}).Count(&count)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"migrated":         count > 0,
+			"migrated_count":   count,
+			"migrated_at":      time.Now().Unix(),
+			"source_group_id":  0,
+		},
 	})
 }
 

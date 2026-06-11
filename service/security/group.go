@@ -25,7 +25,7 @@ func GetSecurityGroupById(id int64) (*model.SecurityGroup, error) {
 }
 
 // GetSecurityGroups 获取分组列表
-func GetSecurityGroups(page, pageSize int, status int, parentID int64) ([]*model.SecurityGroup, int64, error) {
+func GetSecurityGroups(page, pageSize int, status int, parentID int64, name string) ([]*model.SecurityGroup, int64, error) {
 	var groups []*model.SecurityGroup
 	var count int64
 
@@ -35,6 +35,9 @@ func GetSecurityGroups(page, pageSize int, status int, parentID int64) ([]*model
 	}
 	if parentID >= 0 {
 		db = db.Where("parent_id = ?", parentID)
+	}
+	if name != "" {
+		db = db.Where("name LIKE ?", "%"+name+"%")
 	}
 
 	err := db.Count(&count).Error
@@ -157,7 +160,7 @@ func CopySecurityGroup(id int64) (*model.SecurityGroup, error) {
 	}
 
 	newGroup := &model.SecurityGroup{
-		Name:        srcGroup.Name + "_copy",
+		Name:        srcGroup.Name + "(副本)",
 		Description: srcGroup.Description,
 		Status:      constant.SecurityStatusEnabled,
 		ParentID:    srcGroup.ParentID,

@@ -156,6 +156,62 @@ func GetActiveRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
 	return rules, err
 }
 
+// UpdateSecurityRuleStatus 更新规则状态（启用/禁用）
+func UpdateSecurityRuleStatus(id int64, status int) error {
+	rule, err := GetSecurityRuleById(id)
+	if err != nil {
+		return errors.New("规则不存在")
+	}
+
+	err = model.DB.Model(rule).Update("status", status).Error
+	if err != nil {
+		return err
+	}
+
+	InvalidateRuleCache()
+	return nil
+}
+
+// TestSecurityRule 测试单条规则
+func TestSecurityRule(id int64, content string) (*DetectionResult, error) {
+	rule, err := GetSecurityRuleById(id)
+	if err != nil {
+		return nil, errors.New("规则不存在")
+	}
+
+	return GetDetectionEngine().DetectWithRule(rule, content)
+}
+
+// BatchDeleteSecurityRules 批量删除规则
+func BatchDeleteSecurityRules(ids []int64) error {
+	if len(ids) == 0 {
+		return errors.New("未选择规则")
+	}
+
+	err := model.DB.Where("id IN ?", ids).Delete(&model.SecurityRule{}).Error
+	if err != nil {
+		return err
+	}
+
+	InvalidateRuleCache()
+	return nil
+}
+
+// BatchUpdateSecurityRuleStatus 批量更新规则状态
+func BatchUpdateSecurityRuleStatus(ids []int64, status int) error {
+	if len(ids) == 0 {
+		return errors.New("未选择规则")
+	}
+
+	err := model.DB.Model(&model.SecurityRule{}).Where("id IN ?", ids).Update("status", status).Error
+	if err != nil {
+		return err
+	}
+
+	InvalidateRuleCache()
+	return nil
+}
+
 // ValidateRuleContent 验证规则内容
 func ValidateRuleContent(ruleType int, content string) error {
 	switch ruleType {

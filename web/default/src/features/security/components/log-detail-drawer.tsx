@@ -36,6 +36,15 @@ const contentTypeMap: Record<number, string> = {
   2: 'Response',
 }
 
+function maskSensitiveContent(text: string): string {
+  if (!text) return text
+  // 手机号: 138****8000
+  let masked = text.replace(/(\d{3})\d{4}(\d{4})/g, '$1****$2')
+  // 身份证号: 110101********xxxx
+  masked = masked.replace(/(\d{6})\d{8}(\d{4})/g, '$1********$2')
+  return masked
+}
+
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="space-y-1">
@@ -96,13 +105,13 @@ export function LogDetailDrawer({ log, open, onOpenChange }: LogDetailDrawerProp
               <Field label={t('Content Hash')} value={log.original_content_hash} />
 
               {log.processed_content && (
-                <Field label={t('Processed Content')} value={log.processed_content} />
+                <Field label={t('Processed Content')} value={maskSensitiveContent(log.processed_content)} />
               )}
 
               {log.match_detail && (
                 <>
                   <Separator />
-                  <Field label={t('Match Detail')} value={log.match_detail} />
+                  <Field label={t('Match Detail')} value={maskSensitiveContent(log.match_detail)} />
                 </>
               )}
             </>

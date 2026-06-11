@@ -420,6 +420,10 @@ func SetApiRouter(router *gin.Engine) {
 				securityRuleRoute.POST("/", controller.CreateSecurityRule)
 				securityRuleRoute.PUT("/:id", controller.UpdateSecurityRule)
 				securityRuleRoute.DELETE("/:id", controller.DeleteSecurityRule)
+				securityRuleRoute.POST("/:id/test", controller.TestSecurityRule)
+				securityRuleRoute.PATCH("/:id/status", controller.UpdateSecurityRuleStatus)
+				securityRuleRoute.POST("/batch-delete", controller.BatchDeleteSecurityRules)
+				securityRuleRoute.POST("/batch-status", controller.BatchUpdateSecurityRuleStatus)
 			}
 
 			securityPolicyRoute := securityRoute.Group("/policies")
@@ -435,6 +439,7 @@ func SetApiRouter(router *gin.Engine) {
 			securityRoute.GET("/logs/export", middleware.AdminAuth(), controller.ExportSecurityLogs)
 			securityRoute.GET("/dashboard", middleware.AdminAuth(), controller.GetSecurityDashboard)
 			securityRoute.GET("/status", controller.GetSecurityStatus)
+			securityRoute.GET("/migration-status", middleware.AdminAuth(), controller.GetSecurityMigrationStatus)
 
 			// Detection endpoints (admin only)
 			securityRoute.POST("/check/request", middleware.AdminAuth(), controller.CheckSecurityRequest)
