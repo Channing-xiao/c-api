@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/service/security"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +19,8 @@ import (
 // SecurityCheck 请求内容安全检测中间件
 func SecurityCheck() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !security.IsSecurityEnabled() {
+		// 统一开关：环境变量 SECURITY_ENABLED 或旧系统 CheckSensitiveEnabled 任一关闭即跳过
+		if !security.IsSecurityEnabled() || !setting.CheckSensitiveEnabled {
 			c.Next()
 			return
 		}
@@ -93,7 +95,8 @@ func SecurityCheck() gin.HandlerFunc {
 // SecurityCheckResponse 响应内容安全检测中间件
 func SecurityCheckResponse() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !security.IsSecurityEnabled() {
+		// 统一开关：环境变量 SECURITY_ENABLED 或旧系统 CheckSensitiveEnabled 任一关闭即跳过
+		if !security.IsSecurityEnabled() || !setting.CheckSensitiveEnabled {
 			c.Next()
 			return
 		}
