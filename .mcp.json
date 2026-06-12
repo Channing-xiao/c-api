@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "C:\\Users\\iolie\\AppData\\Roaming\\npm\\playwright-mcp.cmd",
+      "args": ["--allowed-hosts", "*"]
+    }
+  }
+}
