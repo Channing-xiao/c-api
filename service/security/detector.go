@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
