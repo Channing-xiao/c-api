@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { TagInput } from '@/components/tag-input'
 import type { SecurityGroup, SecurityPolicy } from '../api/security'
+import { SCOPES, ACTIONS, useSecurityOptions } from '../constants'
 
 interface PolicyFormModalProps {
   open: boolean
@@ -28,20 +29,6 @@ interface PolicyFormModalProps {
   onSubmit: (data: Partial<SecurityPolicy>) => Promise<void>
 }
 
-const scopeOptions = [
-  { value: 1, label: 'Request Only' },
-  { value: 2, label: 'Response Only' },
-  { value: 3, label: 'Both' },
-]
-
-const actionOptions = [
-  { value: 1, label: 'Pass' },
-  { value: 2, label: 'Alert' },
-  { value: 3, label: 'Mask' },
-  { value: 4, label: 'Block' },
-  { value: 5, label: 'Review' },
-]
-
 export function PolicyFormModal({
   open,
   onOpenChange,
@@ -50,6 +37,7 @@ export function PolicyFormModal({
   onSubmit,
 }: PolicyFormModalProps) {
   const { t } = useTranslation()
+  const { scopes, actions } = useSecurityOptions()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Partial<SecurityPolicy>>({
     user_id: 0,
@@ -157,7 +145,7 @@ export function PolicyFormModal({
                   <SelectValue placeholder={t('Select scope')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {scopeOptions.map((opt) => (
+                  {scopes.map((opt) => (
                     <SelectItem key={opt.value} value={String(opt.value)}>
                       {opt.label}
                     </SelectItem>
@@ -178,7 +166,7 @@ export function PolicyFormModal({
                   <SelectValue placeholder={t('Select action')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {actionOptions.map((opt) => (
+                  {actions.map((opt) => (
                     <SelectItem key={opt.value} value={String(opt.value)}>
                       {opt.label}
                     </SelectItem>

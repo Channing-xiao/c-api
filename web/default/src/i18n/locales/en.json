@@ -4550,6 +4550,22 @@
     "Auto-refresh paused after 30 minutes": "Auto-refresh paused after 30 minutes",
     "Export failed": "Export failed",
     "Enter IP and press Enter": "Enter IP and press Enter",
-    "1-100": "1-100"
+    "1-100": "1-100",
+    "Keyword Match": "Keyword Match",
+    "Regex Match": "Regex Match",
+    "AI Detection": "AI Detection",
+    "Pass": "Pass",
+    "Alert": "Alert",
+    "Mask": "Mask",
+    "Block": "Block",
+    "Review": "Review",
+    "Request Only": "Request Only",
+    "Response Only": "Response Only",
+    "Both": "Both",
+    "Low": "Low",
+    "Medium": "Medium",
+    "High": "High",
+    "Critical": "Critical",
+    "Unknown": "Unknown"
   }
 }

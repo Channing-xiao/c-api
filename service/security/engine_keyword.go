@@ -1,9 +1,11 @@
 package security
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
@@ -132,6 +134,13 @@ func (kd *KeywordDetector) Detect(content string, rules []*model.SecurityRule) (
 			Position:    [2]int{start, end},
 		})
 	}
+
+	var matchedRuleIDs []int64
+	for id := range matchedRules {
+		matchedRuleIDs = append(matchedRuleIDs, id)
+	}
+	common.SysLog(fmt.Sprintf("[security:keyword] keywords=%d hits=%d detected=%v matchedRules=%v",
+		len(allKeywords), len(hits), result.Detected, matchedRuleIDs))
 
 	return result, nil
 }

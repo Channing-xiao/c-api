@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { SecurityGroup, SecurityRule } from '../api/security'
+import { RULE_TYPES, ACTIONS, useSecurityOptions } from '../constants'
 
 interface RuleFormModalProps {
   open: boolean
@@ -27,21 +28,6 @@ interface RuleFormModalProps {
   onSubmit: (data: Partial<SecurityRule>) => Promise<void>
 }
 
-const ruleTypeOptions = [
-  { value: 1, label: 'Keyword' },
-  { value: 2, label: 'Regex' },
-  { value: 3, label: 'NER' },
-  { value: 4, label: 'AI' },
-]
-
-const actionOptions = [
-  { value: 1, label: 'Pass' },
-  { value: 2, label: 'Alert' },
-  { value: 3, label: 'Mask' },
-  { value: 4, label: 'Block' },
-  { value: 5, label: 'Review' },
-]
-
 export function RuleFormModal({
   open,
   onOpenChange,
@@ -50,6 +36,7 @@ export function RuleFormModal({
   onSubmit,
 }: RuleFormModalProps) {
   const { t } = useTranslation()
+  const { ruleTypes, actions } = useSecurityOptions()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Partial<SecurityRule>>({
     group_id: 0,
@@ -157,7 +144,7 @@ export function RuleFormModal({
                   <SelectValue placeholder={t('Select type')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {ruleTypeOptions.map((opt) => (
+                  {ruleTypes.map((opt) => (
                     <SelectItem key={opt.value} value={String(opt.value)}>
                       {opt.label}
                     </SelectItem>
@@ -178,7 +165,7 @@ export function RuleFormModal({
                   <SelectValue placeholder={t('Select action')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {actionOptions.map((opt) => (
+                  {actions.map((opt) => (
                     <SelectItem key={opt.value} value={String(opt.value)}>
                       {opt.label}
                     </SelectItem>

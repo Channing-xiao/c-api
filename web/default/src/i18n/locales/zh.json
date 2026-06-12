@@ -4550,6 +4550,22 @@
     "Auto-refresh paused after 30 minutes": "自动刷新已暂停（30分钟超时）",
     "Export failed": "导出失败",
     "Enter IP and press Enter": "输入 IP 后按回车",
-    "1-100": "1-100"
+    "1-100": "1-100",
+    "Keyword Match": "关键词匹配",
+    "Regex Match": "正则匹配",
+    "AI Detection": "AI 识别",
+    "Pass": "放行",
+    "Alert": "告警",
+    "Mask": "脱敏",
+    "Block": "拦截",
+    "Review": "审核",
+    "Request Only": "仅请求",
+    "Response Only": "仅响应",
+    "Both": "双向",
+    "Low": "低",
+    "Medium": "中",
+    "High": "高",
+    "Critical": "严重",
+    "Unknown": "未知"
   }
 }

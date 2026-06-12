@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -81,14 +82,15 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 		return result, nil
 	}
 
-	// 获取用户策略
-	policies, err := GetUserPolicies(userID)
+	// 获取用户策略（使用缓存）
+	policies, err := GetCachedUserPolicies(userID)
 	if err != nil {
 		common.SysLog("获取用户安全策略失败: " + err.Error())
 		return result, nil
 	}
 
 	if len(policies) == 0 {
+		common.SysLog(fmt.Sprintf("[security] user=%d no policies", userID))
 		return result, nil
 	}
 
@@ -109,6 +111,7 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	}
 
 	if len(effectiveGroupIds) == 0 {
+		common.SysLog(fmt.Sprintf("[security] user=%d no effective groups for contentType=%d", userID, contentType))
 		return result, nil
 	}
 
@@ -120,6 +123,7 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	}
 
 	if len(rules) == 0 {
+		common.SysLog(fmt.Sprintf("[security] user=%d no rules for groups=%v", userID, effectiveGroupIds))
 		return result, nil
 	}
 
@@ -200,6 +204,14 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 			result.ProcessedContent = applyMasking(content, allMatches, rules)
 		}
 	}
+
+	// 结构化调试日志（不记录敏感内容）
+	var matchRuleIDs []int64
+	for _, m := range allMatches {
+		matchRuleIDs = append(matchRuleIDs, m.RuleID)
+	}
+	common.SysLog(fmt.Sprintf("[security] detect user=%d contentLen=%d contentType=%d policies=%d groups=%d rules=%d matches=%d matchRuleIDs=%v action=%d riskScore=%d",
+		userID, len(content), contentType, len(policies), len(effectiveGroupIds), len(rules), len(allMatches), matchRuleIDs, result.Action, result.RiskScore))
 
 	// 异步记录日志
 	go recordHitLog(userID, content, result, contentType, modelName)
@@ -284,14 +296,23 @@ func resolveAction(matches []*dto.SecurityMatchResult, rules []*model.SecurityRu
 	return finalAction
 }
 
+// ApplyMasking 对外暴露的脱敏处理入口
+func ApplyMasking(content string, matches []*dto.SecurityMatchResult, rules []*model.SecurityRule) string {
+	return applyMasking(content, matches, rules)
+}
+
 // applyMasking 应用脱敏处理
 func applyMasking(content string, matches []*dto.SecurityMatchResult, rules []*model.SecurityRule) string {
-	// 按位置排序（从后往前替换，避免位置偏移）
+	if len(matches) == 0 {
+		return content
+	}
+
+	// 按位置降序排序（从后往前替换，避免位置偏移）
 	sortedMatches := make([]*dto.SecurityMatchResult, len(matches))
 	copy(sortedMatches, matches)
-	for i, j := 0, len(sortedMatches)-1; i < j; i, j = i+1, j-1 {
-		sortedMatches[i], sortedMatches[j] = sortedMatches[j], sortedMatches[i]
-	}
+	sort.Slice(sortedMatches, func(i, j int) bool {
+		return sortedMatches[i].Position[0] > sortedMatches[j].Position[0]
+	})
 
 	result := content
 	for _, match := range sortedMatches {
@@ -308,12 +329,9 @@ func applyMasking(content string, matches []*dto.SecurityMatchResult, rules []*m
 	return result
 }
 
-// maskText 对文本进行脱敏处理（默认：保留首尾，中间替换为 *）
+// maskText 对文本进行脱敏处理（命中关键字整体替换为 ***）
 func maskText(text string) string {
-	if len(text) <= 2 {
-		return strings.Repeat("*", len(text))
-	}
-	return text[:1] + strings.Repeat("*", len(text)-2) + text[len(text)-1:]
+	return "***"
 }
 
 // recordHitLog 记录命中日志

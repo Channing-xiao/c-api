@@ -7,6 +7,48 @@ import (
 	"github.com/QuantumNous/new-api/model"
 )
 
+func TestKeywordDetector_ConsecutiveDetections(t *testing.T) {
+	detector := &KeywordDetector{}
+	rules := []*model.SecurityRule{
+		{
+			ID:        1,
+			GroupID:   1,
+			Type:      constant.SecurityRuleTypeKeyword,
+			Content:   "敏感词",
+			Action:    constant.SecurityActionBlock,
+			RiskScore: 80,
+			Status:    constant.SecurityStatusEnabled,
+		},
+	}
+
+	// 第一次命中
+	result, err := detector.Detect("包含敏感词的内容", rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Detected {
+		t.Fatalf("expected first request detected")
+	}
+
+	// 第二次未命中（回归：修复前可能因状态污染而误报）
+	result, err = detector.Detect("普通正常内容", rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Detected {
+		t.Fatalf("expected second request not detected, got detected")
+	}
+
+	// 第三次再次命中
+	result, err = detector.Detect("又有敏感词出现", rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Detected {
+		t.Fatalf("expected third request detected")
+	}
+}
+
 func TestKeywordDetector_Detect(t *testing.T) {
 	detector := &KeywordDetector{}
 	rules := []*model.SecurityRule{

@@ -177,6 +177,47 @@
 
 ---
 
+## Phase 10: Bug Fixes (Post-Implementation)
+
+**Purpose**: Fix the bugs documented in `my-spec-project/BUGFIX-PLAN.md` before final release.
+
+### Bug Fix 1: Mask Action Does Not Replace Keywords with `***` (P1)
+
+- [ ] T059 [P] Update `service/security/detector.go::maskText()` to return `"***"`
+- [ ] T060 [P] Fix `service/security/detector.go::applyMasking()` to sort matches by `Position[0]` descending
+- [ ] T061 Refactor `middleware/security.go` content extraction/replacement to operate per-message instead of joining with `\n`
+- [ ] T062 Add fallback warning log in `middleware/security.go` when Mask replacement does not modify the body
+- [ ] T063 Update `service/security/detector_test.go` expectations for `TestMaskText` and `TestApplyMasking`
+- [ ] T064 Add middleware-level test or manual validation for multi-message Mask scenario
+
+**Checkpoint**: Single-message and multi-message Mask requests both produce `***`; audit logs show `processed_content` with `***`.
+
+### Bug Fix 2: Form and List Labels Are Not Localized (P2)
+
+- [ ] T065 [P] Create `web/default/src/features/security/constants.ts` with `RULE_TYPES`, `ACTIONS`, `SCOPES`, `STATUSES`, `RISK_LEVELS`
+- [ ] T066 [P] Replace hardcoded option arrays in `rule-form-modal.tsx`, `policy-form-modal.tsx`, `group-form-modal.tsx` with imports from `constants.ts`
+- [ ] T067 [P] Replace hardcoded mapping objects in `rule-page.tsx`, `policy-page.tsx`, `log-page.tsx` with imports from `constants.ts`
+- [ ] T068 Wrap all security labels with `t()` and add keys to `web/default/src/i18n/locales/en.json` and `zh.json`
+- [ ] T069 Add safe fallback for `SelectValue` when value has no matching option
+- [ ] T070 Run `bun run typecheck` and `bun run i18n:sync`
+
+**Checkpoint**: All security forms and lists display localized labels in both Chinese and English.
+
+### Bug Fix 3: Block Action False-Positives After First Hit (P1/P2)
+
+- [ ] T071 Add structured debug logging to `service/security/detector.go::Detect()`
+- [ ] T072 Add structured debug logging to `service/security/engine_keyword.go::Detect()`
+- [ ] T073 Add structured debug logging to `middleware/security.go::SecurityCheck()` and `SecurityCheckResponse()`
+- [ ] T074 Reproduce false-positive scenario and collect logs to confirm root cause
+- [ ] T075 Implement cache TTL in `service/security/cache.go` (use `SecurityCacheExpiration` or Redis TTL)
+- [ ] T076 Unify policy caching strategy: use `GetCachedUserPolicies()` in `detector.go` or remove the unused function
+- [ ] T077 Add regression test in `service/security/engine_keyword_test.go` for consecutive detections (hit then miss then hit)
+- [ ] T078 Verify Bug Fix 1 per-message replacement also resolves any middleware-side false positives
+
+**Checkpoint**: Clean requests are no longer blocked; logs confirm zero hits for non-matching content; cache expires correctly.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -187,6 +228,7 @@
   - Phase 3 (US1) should be done first as it establishes the navigation framework
   - Phase 4-7 can proceed in parallel after Phase 3 (if staffed), or sequentially
 - **Polish (Phase 9)**: Depends on all desired user stories being complete
+- **Bug Fixes (Phase 10)**: Depends on the feature being functionally complete; can start after Phase 9 or in parallel with final polish tasks T056-T058. Bug Fix 1 should be done first because it may affect Bug Fix 3.
 
 ### User Story Dependencies
 

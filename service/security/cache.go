@@ -17,18 +17,23 @@ const (
 	SecurityCacheExpiration = 5 * time.Minute
 )
 
+type cacheItem[T any] struct {
+	data      T
+	expiredAt int64
+}
+
 var (
-	securityRuleCache    map[string][]*model.SecurityRule
-	securityPolicyCache  map[string][]*model.SecurityPolicyWithGroup
-	securityCacheMutex   sync.RWMutex
+	securityRuleCache   map[string]cacheItem[[]*model.SecurityRule]
+	securityPolicyCache map[string]cacheItem[[]*model.SecurityPolicyWithGroup]
+	securityCacheMutex  sync.RWMutex
 )
 
 func init() {
-	securityRuleCache = make(map[string][]*model.SecurityRule)
-	securityPolicyCache = make(map[string][]*model.SecurityPolicyWithGroup)
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
 }
 
-// GetCachedRulesByGroupIds 从缓存获取规则（先查 Redis，再查内存，最后查数据库）
+// GetCachedRulesByGroupIds 从缓存获取规则（先查内存，再查数据库；缓存带 TTL）
 func GetCachedRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
 	if len(groupIds) == 0 {
 		return nil, nil
@@ -36,13 +41,14 @@ func GetCachedRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
 
 	var allRules []*model.SecurityRule
 	var missingGroupIds []int64
+	now := time.Now().Unix()
 
 	// 尝试从缓存获取
 	securityCacheMutex.RLock()
 	for _, gid := range groupIds {
 		key := fmt.Sprintf(SecurityRuleCacheKey, gid)
-		if rules, ok := securityRuleCache[key]; ok {
-			allRules = append(allRules, rules...)
+		if item, ok := securityRuleCache[key]; ok && item.expiredAt > now {
+			allRules = append(allRules, item.data...)
 		} else {
 			missingGroupIds = append(missingGroupIds, gid)
 		}
@@ -63,9 +69,13 @@ func GetCachedRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
 		}
 
 		securityCacheMutex.Lock()
+		expireAt := time.Now().Add(SecurityCacheExpiration).Unix()
 		for gid, rules := range groupRuleMap {
 			key := fmt.Sprintf(SecurityRuleCacheKey, gid)
-			securityRuleCache[key] = rules
+			securityRuleCache[key] = cacheItem[[]*model.SecurityRule]{
+				data:      rules,
+				expiredAt: expireAt,
+			}
 			allRules = append(allRules, rules...)
 		}
 		securityCacheMutex.Unlock()
@@ -74,14 +84,15 @@ func GetCachedRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
 	return allRules, nil
 }
 
-// GetCachedUserPolicies 从缓存获取用户策略
+// GetCachedUserPolicies 从缓存获取用户策略（带 TTL）
 func GetCachedUserPolicies(userID int) ([]*model.SecurityPolicyWithGroup, error) {
 	key := fmt.Sprintf(SecurityPolicyCacheKey, userID)
+	now := time.Now().Unix()
 
 	securityCacheMutex.RLock()
-	if policies, ok := securityPolicyCache[key]; ok {
+	if item, ok := securityPolicyCache[key]; ok && item.expiredAt > now {
 		securityCacheMutex.RUnlock()
-		return policies, nil
+		return item.data, nil
 	}
 	securityCacheMutex.RUnlock()
 
@@ -92,7 +103,10 @@ func GetCachedUserPolicies(userID int) ([]*model.SecurityPolicyWithGroup, error)
 	}
 
 	securityCacheMutex.Lock()
-	securityPolicyCache[key] = policies
+	securityPolicyCache[key] = cacheItem[[]*model.SecurityPolicyWithGroup]{
+		data:      policies,
+		expiredAt: time.Now().Add(SecurityCacheExpiration).Unix(),
+	}
 	securityCacheMutex.Unlock()
 
 	return policies, nil
@@ -101,7 +115,7 @@ func GetCachedUserPolicies(userID int) ([]*model.SecurityPolicyWithGroup, error)
 // InvalidateRuleCache 使规则缓存失效
 func InvalidateRuleCache() {
 	securityCacheMutex.Lock()
-	securityRuleCache = make(map[string][]*model.SecurityRule)
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
 	securityCacheMutex.Unlock()
 	common.SysLog("安全规则缓存已清空")
 }
@@ -109,7 +123,7 @@ func InvalidateRuleCache() {
 // InvalidatePolicyCache 使策略缓存失效
 func InvalidatePolicyCache() {
 	securityCacheMutex.Lock()
-	securityPolicyCache = make(map[string][]*model.SecurityPolicyWithGroup)
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
 	securityCacheMutex.Unlock()
 	common.SysLog("安全策略缓存已清空")
 }
@@ -117,8 +131,8 @@ func InvalidatePolicyCache() {
 // InvalidateAllSecurityCache 使所有安全缓存失效
 func InvalidateAllSecurityCache() {
 	securityCacheMutex.Lock()
-	securityRuleCache = make(map[string][]*model.SecurityRule)
-	securityPolicyCache = make(map[string][]*model.SecurityPolicyWithGroup)
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
 	securityCacheMutex.Unlock()
 	common.SysLog("所有安全缓存已清空")
 }

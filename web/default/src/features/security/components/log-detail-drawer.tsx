@@ -9,6 +9,7 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { type SecurityHitLog } from '../api/security'
+import { useSecurityOptions } from '../constants'
 
 interface LogDetailDrawerProps {
   log: SecurityHitLog | null
@@ -24,12 +25,7 @@ const actionMap: Record<number, string> = {
   5: 'Review',
 }
 
-const riskLevelMap: Record<number, { label: string; color: string }> = {
-  1: { label: 'Low', color: 'bg-green-100 text-green-800' },
-  2: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-  3: { label: 'High', color: 'bg-orange-100 text-orange-800' },
-  4: { label: 'Critical', color: 'bg-red-100 text-red-800' },
-}
+import { useSecurityOptions } from '../constants'
 
 const contentTypeMap: Record<number, string> = {
   1: 'Request',
@@ -56,8 +52,9 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 export function LogDetailDrawer({ log, open, onOpenChange }: LogDetailDrawerProps) {
   const { t } = useTranslation()
+  const { getLabel, actions, getRiskLevel } = useSecurityOptions()
 
-  const risk = log ? riskLevelMap[log.risk_level] : undefined
+  const risk = log ? getRiskLevel(log.risk_level) : undefined
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -77,10 +74,10 @@ export function LogDetailDrawer({ log, open, onOpenChange }: LogDetailDrawerProp
           {log && (
             <>
               <div className="flex items-center gap-2">
-                <Badge variant="outline">{actionMap[log.action] ?? log.action}</Badge>
+                <Badge variant="outline">{getLabel(actions, log.action)}</Badge>
                 {risk && (
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${risk.color}`}>
-                    {risk.label}
+                    {t(risk.labelKey)}
                   </span>
                 )}
                 <span className="text-muted-foreground text-xs ml-auto">

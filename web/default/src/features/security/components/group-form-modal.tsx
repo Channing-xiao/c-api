@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { SecurityGroup } from '../api/security'
+import { STATUSES, useSecurityOptions } from '../constants'
 
 interface GroupFormModalProps {
   open: boolean
@@ -35,6 +36,7 @@ export function GroupFormModal({
   onSubmit,
 }: GroupFormModalProps) {
   const { t } = useTranslation()
+  const { statuses } = useSecurityOptions()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState<Partial<SecurityGroup>>({
     name: '',
@@ -160,8 +162,11 @@ export function GroupFormModal({
                   <SelectValue placeholder={t('Select status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value='1'>{t('Enabled')}</SelectItem>
-                  <SelectItem value='0'>{t('Disabled')}</SelectItem>
+                  {statuses.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -12,24 +12,11 @@ import { SecurityPageLayout } from '../components/security-page-layout'
 import { RuleFormModal } from '../components/rule-form-modal'
 import { RuleTester } from '../components/rule-tester'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-
-const ruleTypeMap: Record<number, string> = {
-  1: 'Keyword',
-  2: 'Regex',
-  3: 'NER',
-  4: 'AI',
-}
-
-const actionMap: Record<number, string> = {
-  1: 'Pass',
-  2: 'Alert',
-  3: 'Mask',
-  4: 'Block',
-  5: 'Review',
-}
+import { useSecurityOptions } from '../constants'
 
 export function SecurityRulePage() {
   const { t } = useTranslation()
+  const { getLabel, ruleTypes, actions } = useSecurityOptions()
   const [rules, setRules] = useState<SecurityRule[]>([])
   const [groups, setGroups] = useState<SecurityGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -200,8 +187,8 @@ export function SecurityRulePage() {
                   </TableCell>
                   <TableCell className="font-medium">{rule.name}</TableCell>
                   <TableCell>{rule.group_name}</TableCell>
-                  <TableCell><Badge variant="outline">{ruleTypeMap[rule.type] ?? rule.type}</Badge></TableCell>
-                  <TableCell><Badge>{actionMap[rule.action] ?? rule.action}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{getLabel(ruleTypes, rule.type)}</Badge></TableCell>
+                  <TableCell><Badge>{getLabel(actions, rule.action)}</Badge></TableCell>
                   <TableCell>{rule.risk_score}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => openTest(rule)}>{t('Test')}</Button>

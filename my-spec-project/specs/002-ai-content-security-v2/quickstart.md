@@ -124,6 +124,87 @@
 
 ---
 
+## Bug Fix Validation Scenarios
+
+### BF-1: Mask Action Replaces Keywords with `***`
+
+**Goal**: Verify Mask action works for both single-message and multi-message requests.
+
+**Prerequisites**:
+- A Keyword rule exists with keyword `测试` and Action = Mask.
+- A valid API token is available.
+
+**Steps**:
+1. Send a single-message request:
+   ```bash
+   curl -X POST http://45.251.106.61:3000/v1/chat/completions \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"这是一个测试"}]}'
+   ```
+2. Verify the response content contains `***` instead of `测试`.
+3. Send a multi-message request:
+   ```bash
+   curl -X POST http://45.251.106.61:3000/v1/chat/completions \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"你好"},{"role":"user","content":"这是一个测试"}]}'
+   ```
+4. Verify all occurrences of `测试` are replaced with `***`.
+5. Go to `/security/logs` and verify the latest log's `processed_content` contains `***`.
+
+**Expected**: Masking applies correctly in both single and multi-message scenarios, and audit logs reflect the masked content.
+
+---
+
+### BF-2: Form and List Labels Are Localized
+
+**Goal**: Verify Type, Action, Scope, Status, and Risk Level labels switch with the UI language.
+
+**Steps**:
+1. Open `/security/rules` with UI language set to Chinese.
+2. Click "新建规则" and verify Type/Action/Status dropdowns show Chinese labels (e.g., "关键词匹配", "脱敏", "启用").
+3. Save the rule and verify the list page shows Chinese badges.
+4. Switch UI language to English.
+5. Reopen `/security/rules` and verify labels are now in English.
+6. Repeat steps 1-5 for `/security/policies`, `/security/groups`, and `/security/logs`.
+
+**Expected**: All labels are localized and consistent across forms and lists.
+
+---
+
+### BF-3: Block Action Does Not False-Positive
+
+**Goal**: Verify a Block rule only blocks requests containing the keyword.
+
+**Prerequisites**:
+- A Keyword rule exists with keyword `敏感词` and Action = Block.
+- Structured debug logging is enabled for the security module.
+
+**Steps**:
+1. Send request A containing `敏感词`:
+   ```bash
+   curl -X POST http://45.251.106.61:3000/v1/chat/completions \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"这句话包含敏感词"}]}'
+   ```
+2. Verify response is blocked (HTTP 403 or success=false with block message).
+3. Send request B **without** `敏感词`:
+   ```bash
+   curl -X POST http://45.251.106.61:3000/v1/chat/completions \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"这句话很正常"}]}'
+   ```
+4. Verify response is **not** blocked and proceeds normally.
+5. Send request C containing `敏感词` again and verify it is blocked.
+6. Check server logs for each request; confirm request B has `hits=0` and `action=pass`.
+
+**Expected**: Only requests containing the keyword are blocked; logs confirm zero hits for clean requests.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
@@ -133,3 +214,6 @@
 | Logs export ignores filters | Export missing filter params | Verify `start_time`/`end_time`/`model_name` passed to export endpoint |
 | Batch operations fail | Backend batch API missing | Verify `POST /api/security/rules/batch-delete` and `/batch-status` exist |
 | Policy priority not sorting | Database missing `priority` column | Run Migration 1 from `contracts/api.md` |
+| Mask does nothing on multi-message requests | Middleware replaces joined `\n` string that does not exist in raw JSON | Verify per-message replacement is implemented |
+| Block false-positives after first hit | Cache has no TTL; disabled rule still cached | Verify cache TTL implementation and check debug logs |
+| Form labels stay in English | i18n keys missing or hardcoded labels | Verify `constants.ts` labels use `t()` and keys exist in locale files |

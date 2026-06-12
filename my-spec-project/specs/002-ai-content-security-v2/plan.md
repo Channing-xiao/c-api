@@ -142,9 +142,122 @@ web/default/src/
 
 **Structure Decision**: Single full-stack project with Go backend and React frontend. Enhancement is localized to the existing `features/security/` module on the frontend and `controller/service/model/dto/security*` on the backend. No new project structure needed.
 
+## Post-Implementation Bug Fixes
+
+After the v2 feature implementation, the following bugs were identified during end-to-end validation and must be fixed before the feature is considered complete. These fixes are tracked in `my-spec-project/BUGFIX-PLAN.md` and are summarized below for traceability within this implementation plan.
+
+### Bug Fix 1: Mask Action Does Not Replace Keywords with `***`
+
+**Priority**: P1
+
+**Symptom**: When a rule with Action = Mask matches, the sensitive keyword is not replaced with `***`.
+
+**Root Causes**:
+1. `service/security/detector.go::maskText()` currently preserves first/last characters (e.g., `password` → `p******d`) instead of returning a fixed `***` mask.
+2. `service/security/detector.go::applyMasking()` sorts matches by simply reversing the slice, which only works if matches are already ordered. It should sort by `Position[0]` descending.
+3. `middleware/security.go::extractContentFromRequest()` joins multiple user messages with `\n`, but `replaceContentInRequest()` then tries to replace the joined string inside the original JSON. When there are multiple messages, the joined string does not exist in the raw request body, so masking silently fails. The same issue exists for responses.
+4. `middleware/security.go::replaceContentInRequest()` and `replaceContentInResponse()` use `strings.Replace(..., -1)`, which can unintentionally replace occurrences in unrelated JSON fields.
+
+**Fix**:
+- Change `maskText()` to always return `"***"`.
+- Fix `applyMasking()` to explicitly sort matches by `Position[0]` descending before replacing.
+- Refactor request/response content extraction and replacement to operate per-message instead of joining with `\n`. Replace each individual message content in the JSON body rather than the concatenated string.
+- Add a fallback log warning when a Mask action produces a `ProcessedContent` but the middleware fails to perform any replacement.
+- Update `service/security/detector_test.go` expectations (`TestMaskText`, `TestApplyMasking`).
+
+**Affected Files**:
+- `service/security/detector.go`
+- `middleware/security.go`
+- `service/security/detector_test.go`
+
+**Validation**:
+- Create a Keyword rule with Action = Mask and keyword `测试`.
+- Send a single-message chat request containing `测试`; verify response shows `***`.
+- Send a multi-message chat request where one message contains `测试`; verify all occurrences are masked.
+- Verify `processed_content` in the audit log contains `***`.
+
+---
+
+### Bug Fix 2: Form and List Labels Are Not Localized
+
+**Priority**: P2
+
+**Symptom**: Security forms and list pages display hardcoded English labels (`Keyword`, `Block`, `Low`, etc.) regardless of the selected UI language.
+
+**Root Causes**:
+1. `rule-form-modal.tsx`, `policy-form-modal.tsx`, `group-form-modal.tsx`, and list pages (`rule-page.tsx`, `policy-page.tsx`, `log-page.tsx`) define label mappings with hardcoded English strings.
+2. There is no shared frontend constant file; the same mappings are duplicated across components.
+3. Backend enum values (`constant/security.go`) and frontend numeric mappings are not synchronized through a single source of truth.
+
+**Fix**:
+- Create `web/default/src/features/security/constants.ts` with shared, localizable option definitions:
+  - `RULE_TYPES`, `ACTIONS`, `SCOPES`, `STATUSES`, `RISK_LEVELS`
+- Replace all hardcoded option arrays and mapping objects (`ruleTypeMap`, `actionMap`, `scopeMap`, `riskLevelMap`) across form modals and list pages with imports from `constants.ts`.
+- Wrap all labels with `t(labelKey)` and add the corresponding keys to `en.json`, `zh.json`, and other supported locales.
+- Add a safe fallback (e.g., `t('Unknown')`) for `SelectValue` when the current value has no matching option.
+
+**Affected Files**:
+- `web/default/src/features/security/constants.ts` (new)
+- `web/default/src/features/security/components/rule-form-modal.tsx`
+- `web/default/src/features/security/components/policy-form-modal.tsx`
+- `web/default/src/features/security/components/group-form-modal.tsx`
+- `web/default/src/features/security/pages/rule-page.tsx`
+- `web/default/src/features/security/pages/policy-page.tsx`
+- `web/default/src/features/security/pages/log-page.tsx`
+- `web/default/src/i18n/locales/en.json`
+- `web/default/src/i18n/locales/zh.json`
+
+**Validation**:
+- Open `/security/rules` in Chinese; verify Type/Action/Status dropdowns and list badges show Chinese labels.
+- Switch UI to English; verify labels switch to English.
+- Repeat for `/security/policies`, `/security/groups`, and `/security/logs`.
+
+---
+
+### Bug Fix 3: Block Action Continues to Block Non-Matching Content
+
+**Priority**: P1/P2
+
+**Symptom**: After a Keyword rule with Action = Block matches once, subsequent requests without the keyword are still blocked.
+
+**Root Causes** (to be confirmed with logs):
+1. **Most likely**: `service/security/cache.go` defines `SecurityCacheExpiration = 5 * time.Minute` but never uses it. `securityRuleCache` and `securityPolicyCache` are plain maps with no TTL, so cached rules never expire automatically. A disabled/deleted rule can remain active indefinitely unless `InvalidateRuleCache()` is explicitly called.
+2. `service/security/detector.go` calls `GetUserPolicies(userID)` directly instead of the existing `GetCachedUserPolicies()`, indicating the caching layer is partially unused and inconsistent.
+3. The middleware content-joining issue described in Bug Fix 1 may also cause unexpected matching behavior on multi-message requests.
+
+**Fix**:
+1. Add structured debug logging to `DetectionEngine.Detect()`, `KeywordDetector.Detect()`, and both middleware `SecurityCheck*` functions to capture per-request policy/rule counts, hit counts, and final actions.
+2. Reproduce the false-positive scenario once with logging enabled, then analyze the logs to confirm the root cause.
+3. Implement cache TTL:
+   - Either wrap cached entries with a timestamp and expire them on read based on `SecurityCacheExpiration`;
+   - Or move cache to Redis with a TTL.
+4. Decide on a consistent policy caching strategy: either use `GetCachedUserPolicies()` in `detector.go` or remove the unused function.
+5. Fix the multi-message content extraction issue from Bug Fix 1 to rule out middleware-side false positives.
+
+**Affected Files**:
+- `service/security/cache.go`
+- `service/security/detector.go`
+- `service/security/engine_keyword.go`
+- `middleware/security.go`
+- `service/security/engine_keyword_test.go` (add regression test)
+
+**Validation**:
+- Create a Keyword rule with keyword `敏感词` and Action = Block.
+- Send request 1 with `敏感词` → expect block.
+- Send request 2 without `敏感词` → expect normal response.
+- Send request 3 with `敏感词` → expect block again.
+- Verify server logs show the correct match counts for each request.
+
+---
+
+### Bug Fix Rollback & Security Notes
+
+- **Rollback**: Use `git revert HEAD` (safer) instead of `git reset --hard HEAD~1` + `git push --force`.
+- **Password safety**: Do not commit the test server password (`%XSui9i81fm1!ZC8`) to the repository. Remove it from `BUGFIX-PLAN.md` and rotate it if it has already been committed.
+
 ## Complexity Tracking
 
-> No constitution violations identified. All changes are incremental enhancements to an existing well-structured module.
+> No constitution violations identified. All changes are incremental enhancements to an existing well-structured module. Bug fixes are localized to the security module and its tests.
 
 | Decision | Why Needed | Simpler Alternative Rejected Because |
 |----------|------------|-------------------------------------|

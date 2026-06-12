@@ -10,26 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { securityApi, type SecurityHitLog } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
 import { LogDetailDrawer } from '../components/log-detail-drawer'
+import { useSecurityOptions } from '../constants'
 
 const POLLING_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
-const actionMap: Record<number, string> = {
-  1: 'Pass',
-  2: 'Alert',
-  3: 'Mask',
-  4: 'Block',
-  5: 'Review',
-}
-
-const riskLevelMap: Record<number, { label: string; color: string }> = {
-  1: { label: 'Low', color: 'bg-green-100 text-green-800' },
-  2: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
-  3: { label: 'High', color: 'bg-orange-100 text-orange-800' },
-  4: { label: 'Critical', color: 'bg-red-100 text-red-800' },
-}
-
 export function SecurityLogPage() {
   const { t } = useTranslation()
+  const { getLabel, actions, getRiskLevel } = useSecurityOptions()
   const [logs, setLogs] = useState<SecurityHitLog[]>([])
   const [loading, setLoading] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -208,11 +195,17 @@ export function SecurityLogPage() {
                   <TableCell>{new Date(log.created_at * 1000).toLocaleString()}</TableCell>
                   <TableCell>{log.user_name}</TableCell>
                   <TableCell>{log.model_name}</TableCell>
-                  <TableCell><Badge>{actionMap[log.action] ?? log.action}</Badge></TableCell>
+                  <TableCell><Badge>{getLabel(actions, log.action)}</Badge></TableCell>
                   <TableCell>
                     {(() => {
-                      const risk = riskLevelMap[log.risk_level]
-                      return risk ? <span className={`px-2 py-1 rounded text-xs font-medium ${risk.color}`}>{risk.label}</span> : log.risk_level
+                      const risk = getRiskLevel(log.risk_level)
+                      return risk ? (
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${risk.color}`}>
+                          {t(risk.labelKey)}
+                        </span>
+                      ) : (
+                        log.risk_level
+                      )
                     })()}
                   </TableCell>
                   <TableCell>{log.risk_score}</TableCell>

@@ -9,23 +9,11 @@ import { Badge } from '@/components/ui/badge'
 import { securityApi, type SecurityGroup, type SecurityPolicy } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
 import { PolicyFormModal } from '../components/policy-form-modal'
-
-const scopeMap: Record<number, string> = {
-  1: 'Request Only',
-  2: 'Response Only',
-  3: 'Both',
-}
-
-const actionMap: Record<number, string> = {
-  1: 'Pass',
-  2: 'Alert',
-  3: 'Mask',
-  4: 'Block',
-  5: 'Review',
-}
+import { useSecurityOptions } from '../constants'
 
 export function SecurityPolicyPage() {
   const { t } = useTranslation()
+  const { getLabel, scopes, actions } = useSecurityOptions()
   const [policies, setPolicies] = useState<SecurityPolicy[]>([])
   const [groups, setGroups] = useState<SecurityGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -119,8 +107,8 @@ export function SecurityPolicyPage() {
                 <TableRow key={policy.id}>
                   <TableCell className="font-medium">{policy.user_name}</TableCell>
                   <TableCell>{policy.group_name}</TableCell>
-                  <TableCell><Badge variant="outline">{scopeMap[policy.scope] ?? policy.scope}</Badge></TableCell>
-                  <TableCell><Badge>{actionMap[policy.default_action] ?? policy.default_action}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{getLabel(scopes, policy.scope)}</Badge></TableCell>
+                  <TableCell><Badge>{getLabel(actions, policy.default_action)}</Badge></TableCell>
                   <TableCell>{policy.priority ?? 0}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleEdit(policy)}>{t('Edit')}</Button>

@@ -45,20 +45,31 @@ func TestApplyMasking(t *testing.T) {
 	}
 
 	result := applyMasking("请联系 13800138000", matches, rules)
-	expected := "请联系 1*********0"
+	expected := "请联系 ***"
 	if result != expected {
 		t.Fatalf("expected %q, got %q", expected, result)
+	}
+
+	// 验证乱序 matches 也能正确替换
+	matches2 := []*dto.SecurityMatchResult{
+		{RuleID: 1, Position: [2]int{13, 24}},
+		{RuleID: 1, Position: [2]int{0, 11}},
+	}
+	result2 := applyMasking("13800138000 请联系 13800138000", matches2, rules)
+	expected2 := "*** 请联系 ***"
+	if result2 != expected2 {
+		t.Fatalf("expected %q, got %q", expected2, result2)
 	}
 }
 
 func TestMaskText(t *testing.T) {
-	if maskText("ab") != "**" {
-		t.Fatalf("expected **, got %s", maskText("ab"))
+	if maskText("ab") != "***" {
+		t.Fatalf("expected ***, got %s", maskText("ab"))
 	}
-	if maskText("abc") != "a*c" {
-		t.Fatalf("expected a*c, got %s", maskText("abc"))
+	if maskText("abc") != "***" {
+		t.Fatalf("expected ***, got %s", maskText("abc"))
 	}
-	if maskText("abcd") != "a**d" {
-		t.Fatalf("expected a**d, got %s", maskText("abcd"))
+	if maskText("abcd") != "***" {
+		t.Fatalf("expected ***, got %s", maskText("abcd"))
 	}
 }
