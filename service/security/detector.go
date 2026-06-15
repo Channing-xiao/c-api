@@ -193,24 +193,51 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	result.Detected = detected
 	result.RiskScore = maxRiskScore
 	result.RiskLevel = constant.GetSecurityRiskLevelByScore(maxRiskScore)
-	result.Matches = allMatches
 
-	if detected {
+	// 过滤掉无效匹配（空文本或非法位置），避免误报
+	validMatches := make([]*dto.SecurityMatchResult, 0, len(allMatches))
+	for _, m := range allMatches {
+		if m == nil || m.MatchedText == "" {
+			continue
+		}
+		if m.Position[0] < 0 || m.Position[1] <= m.Position[0] || m.Position[1] > len(content) {
+			common.SysLog(fmt.Sprintf("[security] invalid match position dropped: ruleID=%d position=%v", m.RuleID, m.Position))
+			continue
+		}
+		validMatches = append(validMatches, m)
+	}
+	result.Matches = validMatches
+
+	// 重新计算 Detected：没有有效匹配时不得判定为命中
+	if len(result.Matches) == 0 {
+		result.Detected = false
+		result.Action = constant.SecurityActionPass
+		result.RiskScore = 0
+		result.RiskLevel = constant.GetSecurityRiskLevelByScore(0)
+	}
+
+	if result.Detected {
 		// 计算最终动作（取最高优先级）
-		result.Action = resolveAction(allMatches, rules)
+		result.Action = resolveAction(result.Matches, rules)
 		// 执行脱敏
 		if result.Action == constant.SecurityActionMask {
-			result.ProcessedContent = applyMasking(content, allMatches, rules)
+			result.ProcessedContent = applyMasking(content, result.Matches, rules)
 		}
 	}
 
 	// 结构化调试日志（不记录敏感内容）
 	var matchRuleIDs []int64
-	for _, m := range allMatches {
+	for _, m := range result.Matches {
 		matchRuleIDs = append(matchRuleIDs, m.RuleID)
 	}
 	common.SysLog(fmt.Sprintf("[security] detect user=%d contentLen=%d contentType=%d policies=%d groups=%d rules=%d matches=%d matchRuleIDs=%v action=%d riskScore=%d",
-		userID, len(content), contentType, len(policies), len(effectiveGroupIds), len(rules), len(allMatches), matchRuleIDs, result.Action, result.RiskScore))
+		userID, len(content), contentType, len(policies), len(effectiveGroupIds), len(rules), len(result.Matches), matchRuleIDs, result.Action, result.RiskScore))
+
+	// 详细命中诊断日志（记录命中的规则和文本，便于排查误报）
+	for _, m := range result.Matches {
+		common.SysLog(fmt.Sprintf("[security:match] ruleID=%d groupID=%d type=%d matchedText=%q position=%v",
+			m.RuleID, m.GroupID, m.Type, m.MatchedText, m.Position))
+	}
 
 	// 异步记录日志
 	go recordHitLog(userID, content, result, contentType, modelName)

@@ -409,6 +409,7 @@ func SetApiRouter(router *gin.Engine) {
 				securityGroupRoute.GET("/", controller.GetSecurityGroups)
 				securityGroupRoute.POST("/", controller.CreateSecurityGroup)
 				securityGroupRoute.PUT("/:id", controller.UpdateSecurityGroup)
+				securityGroupRoute.PATCH("/:id/status", controller.UpdateSecurityGroupStatus)
 				securityGroupRoute.DELETE("/:id", controller.DeleteSecurityGroup)
 				securityGroupRoute.POST("/:id/copy", controller.CopySecurityGroup)
 			}

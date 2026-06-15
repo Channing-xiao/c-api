@@ -136,11 +136,15 @@ func (kd *KeywordDetector) Detect(content string, rules []*model.SecurityRule) (
 	}
 
 	var matchedRuleIDs []int64
+	var matchedWords []string
 	for id := range matchedRules {
 		matchedRuleIDs = append(matchedRuleIDs, id)
 	}
-	common.SysLog(fmt.Sprintf("[security:keyword] keywords=%d hits=%d detected=%v matchedRules=%v",
-		len(allKeywords), len(hits), result.Detected, matchedRuleIDs))
+	for word := range keywordFirstHit {
+		matchedWords = append(matchedWords, word)
+	}
+	common.SysLog(fmt.Sprintf("[security:keyword] keywords=%d hits=%d detected=%v matchedRules=%v matchedWords=%v",
+		len(allKeywords), len(hits), result.Detected, matchedRuleIDs, matchedWords))
 
 	return result, nil
 }

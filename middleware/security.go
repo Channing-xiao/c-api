@@ -75,13 +75,14 @@ func SecurityCheck() gin.HandlerFunc {
 		}
 
 		if result.Detected {
-			common.SysLog(fmt.Sprintf("[security:middleware] user=%d detected=%v action=%d contentLen=%d",
-				userId, result.Detected, result.Action, len(content)))
+			common.SysLog(fmt.Sprintf("[security:middleware] user=%d detected=%v action=%d contentLen=%d matches=%d",
+				userId, result.Detected, result.Action, len(content), len(result.Matches)))
 			switch result.Action {
 			case constant.SecurityActionBlock:
 				c.JSON(http.StatusForbidden, gin.H{
 					"success": false,
 					"message": getBlockMessage(userId),
+					"details": getMatchDetails(result.Matches),
 				})
 				c.Abort()
 				return
@@ -164,8 +165,8 @@ func SecurityCheckResponse() gin.HandlerFunc {
 		}
 
 		if result.Detected {
-			common.SysLog(fmt.Sprintf("[security:middleware] user=%d detected=%v action=%d contentLen=%d",
-				userId, result.Detected, result.Action, len(content)))
+			common.SysLog(fmt.Sprintf("[security:middleware] user=%d detected=%v action=%d contentLen=%d matches=%d",
+				userId, result.Detected, result.Action, len(content), len(result.Matches)))
 			switch result.Action {
 			case constant.SecurityActionBlock:
 				// 重写为拦截响应
@@ -174,6 +175,7 @@ func SecurityCheckResponse() gin.HandlerFunc {
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
 					"message": getBlockMessage(userId),
+					"details": getMatchDetails(result.Matches),
 				})
 				return
 			case constant.SecurityActionMask:
@@ -504,6 +506,21 @@ func replaceMaskedResponse(body []byte, result *security.DetectionResult) ([]byt
 // replaceContentInResponse 替换响应体中的内容（保留用于简单场景兼容）
 func replaceContentInResponse(body []byte, oldContent, newContent string) []byte {
 	return []byte(strings.Replace(string(body), oldContent, newContent, -1))
+}
+
+// getMatchDetails 将匹配结果转换为可读的诊断信息
+func getMatchDetails(matches []*dto.SecurityMatchResult) []gin.H {
+	details := make([]gin.H, 0, len(matches))
+	for _, m := range matches {
+		details = append(details, gin.H{
+			"rule_id":      m.RuleID,
+			"group_id":     m.GroupID,
+			"type":         m.Type,
+			"matched_text": m.MatchedText,
+			"position":     m.Position,
+		})
+	}
+	return details
 }
 
 // isChatCompletionEndpoint 判断是否为聊天补全接口

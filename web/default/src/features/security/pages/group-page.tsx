@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { securityApi, type SecurityGroup } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
@@ -74,6 +75,17 @@ export function SecurityGroupPage() {
     }
   }
 
+  const handleToggleStatus = async (group: SecurityGroup) => {
+    const newStatus = group.status === 1 ? 0 : 1
+    try {
+      await securityApi.updateGroupStatus(group.id, newStatus)
+      toast.success(t(newStatus === 1 ? 'Group enabled' : 'Group disabled'))
+      loadGroups()
+    } catch {
+      toast.error(t('Failed to update group status'))
+    }
+  }
+
   if (loading) {
     return (
       <SecurityPageLayout>
@@ -117,7 +129,18 @@ export function SecurityGroupPage() {
                 <TableRow key={group.id}>
                   <TableCell className="font-medium">{group.name}</TableCell>
                   <TableCell>{group.description}</TableCell>
-                  <TableCell>{group.status === 1 ? t('Enabled') : t('Disabled')}</TableCell>
+                  <TableCell>
+                    <div className='flex items-center gap-2'>
+                      <Switch
+                        checked={group.status === 1}
+                        onCheckedChange={() => handleToggleStatus(group)}
+                        size='sm'
+                      />
+                      <span className='text-sm'>
+                        {group.status === 1 ? t('Enabled') : t('Disabled')}
+                      </span>
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleEdit(group)}>{t('Edit')}</Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(group.id)}>

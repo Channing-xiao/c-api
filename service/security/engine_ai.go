@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -61,6 +62,7 @@ func (ad *AIDetector) DetectWithContext(ctx context.Context, content string, rul
 	if detected {
 		result.Detected = true
 		result.RiskScore = riskScore
+		common.SysLog(fmt.Sprintf("[security:ai] detected=true riskScore=%d reason=%q", riskScore, reason))
 		for _, rule := range aiRules {
 			result.Matches = append(result.Matches, &dto.SecurityMatchResult{
 				RuleID:      rule.ID,

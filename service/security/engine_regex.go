@@ -1,9 +1,11 @@
 package security
 
 import (
+	"fmt"
 	"sync"
 	"unicode/utf8"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
@@ -80,6 +82,8 @@ func (rd *RegexDetector) Detect(content string, rules []*model.SecurityRule) (*E
 			}
 
 			matchedText := match.String()
+			common.SysLog(fmt.Sprintf("[security:regex] ruleID=%d matchedText=%q", rule.ID, matchedText))
+
 			// regexp2 的 Index/Length 是 rune 位置，转换为 byte 位置
 			start := runeToByte[match.Index]
 			end := runeToByte[match.Index+match.Length]

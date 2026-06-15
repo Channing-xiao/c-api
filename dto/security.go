@@ -11,6 +11,7 @@ type SecurityGroupRequest struct {
 	Description string `json:"description" binding:"max=255"`
 	ParentID    int64  `json:"parent_id"`
 	SortOrder   int    `json:"sort_order"`
+	Status      int    `json:"status" binding:"oneof=0 1"`
 }
 
 type SecurityGroupResponse struct {

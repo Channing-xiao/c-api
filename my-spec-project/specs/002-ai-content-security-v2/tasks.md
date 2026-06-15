@@ -205,9 +205,9 @@
 
 ### Bug Fix 3: Block Action False-Positives After First Hit (P1/P2)
 
-- [ ] T071 Add structured debug logging to `service/security/detector.go::Detect()`
-- [ ] T072 Add structured debug logging to `service/security/engine_keyword.go::Detect()`
-- [ ] T073 Add structured debug logging to `middleware/security.go::SecurityCheck()` and `SecurityCheckResponse()`
+- [x] T071 Add structured debug logging to `service/security/detector.go::Detect()`
+- [x] T072 Add structured debug logging to `service/security/engine_keyword.go::Detect()`
+- [x] T073 Add structured debug logging to `middleware/security.go::SecurityCheck()` and `SecurityCheckResponse()`
 - [ ] T074 Reproduce false-positive scenario and collect logs to confirm root cause
 - [ ] T075 Implement cache TTL in `service/security/cache.go` (use `SecurityCacheExpiration` or Redis TTL)
 - [ ] T076 Unify policy caching strategy: use `GetCachedUserPolicies()` in `detector.go` or remove the unused function
@@ -215,6 +215,19 @@
 - [ ] T078 Verify Bug Fix 1 per-message replacement also resolves any middleware-side false positives
 
 **Checkpoint**: Clean requests are no longer blocked; logs confirm zero hits for non-matching content; cache expires correctly.
+
+### Bug Fix 4: Group Status Cannot Be Changed to Disabled (P1)
+
+- [x] T079 [P] Add `Status int` field to `dto/security.go` `SecurityGroupRequest` with `binding:"oneof=0 1"`
+- [x] T080 Update `service/security/group.go::UpdateSecurityGroup()` to include `"status": req.Status` in updates map and call `InvalidateRuleCache()`
+- [x] T081 [P] (Recommended UX) Add `UpdateSecurityGroupStatus` to `service/security/group.go`
+- [x] T082 [P] (Recommended UX) Add `PATCH /api/security/groups/:id/status` controller in `controller/security.go`
+- [x] T083 (Recommended UX) Register `PATCH /api/security/groups/:id/status` route in `router/api-router.go`
+- [x] T084 [P] (Recommended UX) Add `updateGroupStatus` to `web/default/src/features/security/api/security.ts`
+- [x] T085 (Recommended UX) Add row-level Switch toggle to `web/default/src/features/security/pages/group-page.tsx` and refresh list on success
+- [x] T086 Verify edit-form status change persists after refresh and disabled groups stop participating in detection
+
+**Checkpoint**: Group status can be disabled via form or toggle, persists across refresh, and correctly gates detection.
 
 ---
 
@@ -252,6 +265,7 @@
 - Phase 2 (Foundational) backend tasks T009-T022 can run in parallel (most touch different files)
 - After Phase 3 (US1 Navigation), Phase 4-7 can be worked on in parallel by different developers
 - Phase 9 polish tasks T048-T058 can run in parallel
+- Bug Fix 4 tasks T079-T086 can run in parallel and are independent of Bug Fixes 1-3
 
 ---
 
@@ -287,6 +301,7 @@ Task: "Add DetectWithRule to service/security/detector.go"
 4. Add User Story 4 (Rule Testing/Batch) + User Story 6 (Policy Priority) → Test → Deploy
 5. Add User Story 5 (Real-time Monitoring) → Test → Deploy
 6. Polish phase → Final validation → Deploy
+7. Bug Fixes (Phase 10): Bug Fix 1 first (may affect Bug Fix 3), then Bug Fix 2 and Bug Fix 4 can proceed in parallel
 
 ### Parallel Team Strategy
 

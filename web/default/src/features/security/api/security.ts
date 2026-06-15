@@ -101,6 +101,8 @@ export const securityApi = {
   createGroup: (data: Partial<SecurityGroup>) => api.post('/api/security/groups', data).then((r) => r.data),
   updateGroup: (id: number, data: Partial<SecurityGroup>) =>
     api.put(`/api/security/groups/${id}`, data).then((r) => r.data),
+  updateGroupStatus: (id: number, status: number) =>
+    api.patch(`/api/security/groups/${id}/status`, { status }).then((r) => r.data),
   deleteGroup: (id: number) => api.delete(`/api/security/groups/${id}`).then((r) => r.data),
   copyGroup: (id: number) => api.post(`/api/security/groups/${id}/copy`).then((r) => r.data),
 

@@ -250,6 +250,40 @@ After the v2 feature implementation, the following bugs were identified during e
 
 ---
 
+### Bug Fix 4: Group Status Cannot Be Changed to Disabled
+
+**Priority**: P1
+
+**Symptom**: On `/security/groups`, editing a group and setting its Status to "Disabled" does not persist. After saving, the group still appears as "Enabled".
+
+**Root Causes**:
+1. `dto.SecurityGroupRequest` does not include a `Status` field, so the status value sent by the frontend is ignored during `c.ShouldBindJSON`.
+2. `service/security/group.go::UpdateSecurityGroup()` builds an `updates` map that only sets `name`, `description`, `sort_order`, and `updated_at`; it never writes `status` to the database.
+
+**Fix**:
+1. Add `Status int` to `dto.SecurityGroupRequest` with binding `oneof=0 1` (default 1 when not provided for backward compatibility with create).
+2. Update `service/security/group.go::UpdateSecurityGroup()` to include `"status": req.Status` in the `updates` map.
+3. (Recommended for UX consistency with rules) Add a dedicated `PATCH /api/security/groups/:id/status` endpoint and a row-level Switch toggle on `/security/groups`, so administrators can enable/disable groups without opening the full edit modal.
+4. If the toggle endpoint is added, register it in `router/api-router.go` and wire it through `controller/security.go` and `service/security/group.go`.
+5. Invalidate the rule cache after a group's status changes so that disabled groups stop participating in detection immediately.
+
+**Affected Files**:
+- `dto/security.go`
+- `service/security/group.go`
+- `controller/security.go` (if toggle endpoint added)
+- `router/api-router.go` (if toggle endpoint added)
+- `web/default/src/features/security/pages/group-page.tsx` (if toggle added)
+- `web/default/src/features/security/api/security.ts` (if toggle added)
+
+**Validation**:
+- Open `/security/groups`, click "Edit" on an enabled group, change Status to "Disabled", and save.
+- Verify the table row immediately shows "Disabled" and survives a page refresh.
+- Re-open the same group and set Status back to "Enabled"; verify it persists.
+- If the toggle endpoint is implemented, click the row switch to disable a group and verify the change persists without opening the modal.
+- Submit content that would match a rule in the disabled group and verify it is no longer intercepted; re-enable the group and verify detection resumes.
+
+---
+
 ### Bug Fix Rollback & Security Notes
 
 - **Rollback**: Use `git revert HEAD` (safer) instead of `git reset --hard HEAD~1` + `git push --force`.

@@ -205,6 +205,34 @@
 
 ---
 
+### BF-4: Group Status Can Be Disabled and Re-Enabled
+
+**Goal**: Verify that changing a security group's status to "Disabled" persists and stops detection for rules in that group.
+
+**Prerequisites**:
+- A security group exists with at least one enabled Keyword rule that matches a known keyword.
+
+**Steps**:
+1. Go to `/security/groups`.
+2. Find the group containing the test rule and click "Edit".
+3. Change **Status** from "Enabled" to "Disabled" and save.
+4. Verify the table row now shows "Disabled".
+5. Refresh the page and verify the group still shows "Disabled".
+6. Submit a chat request containing the keyword:
+   ```bash
+   curl -X POST http://45.251.106.61:3000/v1/chat/completions \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"这句话包含测试关键词"}]}'
+   ```
+7. Verify the request is **not** intercepted (the disabled group's rules are skipped).
+8. Re-open the group, change Status back to "Enabled", and save.
+9. Submit the same request again and verify it **is** intercepted.
+
+**Expected**: Group status changes persist across refresh and correctly control whether the group's rules participate in detection.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |
@@ -217,3 +245,5 @@
 | Mask does nothing on multi-message requests | Middleware replaces joined `\n` string that does not exist in raw JSON | Verify per-message replacement is implemented |
 | Block false-positives after first hit | Cache has no TTL; disabled rule still cached | Verify cache TTL implementation and check debug logs |
 | Form labels stay in English | i18n keys missing or hardcoded labels | Verify `constants.ts` labels use `t()` and keys exist in locale files |
+| Group status reverts after save | `SecurityGroupRequest` missing `Status` field or `UpdateSecurityGroup` not updating status | Verify `dto/security.go` has `Status` and `service/security/group.go` includes it in updates |
+| Disabled group's rules still intercept | Rule cache not invalidated on group status change | Verify `InvalidateRuleCache()` is called after group update/toggle |

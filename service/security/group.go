@@ -115,10 +115,16 @@ func UpdateSecurityGroup(id int64, req *dto.SecurityGroupRequest) error {
 		"name":        req.Name,
 		"description": req.Description,
 		"sort_order":  req.SortOrder,
+		"status":      req.Status,
 		"updated_at":  time.Now().Unix(),
 	}
 
-	return model.DB.Model(group).Updates(updates).Error
+	if err := model.DB.Model(group).Updates(updates).Error; err != nil {
+		return err
+	}
+
+	InvalidateRuleCache()
+	return nil
 }
 
 // DeleteSecurityGroup 删除分组（同时删除子分组和规则）
@@ -207,6 +213,21 @@ func CopySecurityGroup(id int64) (*model.SecurityGroup, error) {
 
 	InvalidateRuleCache()
 	return newGroup, nil
+}
+
+// UpdateSecurityGroupStatus 更新分组状态（启用/禁用）
+func UpdateSecurityGroupStatus(id int64, status int) error {
+	group, err := GetSecurityGroupById(id)
+	if err != nil {
+		return errors.New("分组不存在")
+	}
+
+	if err := model.DB.Model(group).Update("status", status).Error; err != nil {
+		return err
+	}
+
+	InvalidateRuleCache()
+	return nil
 }
 
 // GetSecurityGroupTree 获取分组树形结构

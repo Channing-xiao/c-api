@@ -100,6 +100,25 @@ func CopySecurityGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "分组复制成功", "data": group})
 }
 
+func UpdateSecurityGroupStatus(c *gin.Context) {
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	var req struct {
+		Status int `json:"status" binding:"oneof=0 1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := security.UpdateSecurityGroupStatus(id, req.Status); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	security.CreateAuditLog(c.GetInt("id"), "update_status", "security_group", id, nil, req)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "状态更新成功"})
+}
+
 // ========== 安全规则管理 ==========
 
 func GetSecurityRules(c *gin.Context) {

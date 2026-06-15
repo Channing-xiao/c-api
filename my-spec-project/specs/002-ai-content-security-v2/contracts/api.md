@@ -35,6 +35,64 @@
 
 ---
 
+### `PUT /api/security/groups/:id`
+
+**Changes**: Request body now accepts `status` so group enable/disable can be persisted.
+
+**Path Params**:
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | int64 | Group ID |
+
+**Request Body**:
+```json
+{
+  "name": "Sensitive Data",
+  "description": "Rules for PII detection",
+  "parent_id": 0,
+  "sort_order": 1,
+  "status": 0
+}
+```
+- `status`: `0` = disabled, `1` = enabled (optional, default `1`)
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "分组更新成功"
+}
+```
+
+---
+
+### `PATCH /api/security/groups/:id/status` *(Recommended)*
+
+Toggle a single group's status without sending the full group body. Provides the same UX pattern already used for rules.
+
+**Path Params**:
+| Param | Type | Description |
+|-------|------|-------------|
+| `id` | int64 | Group ID |
+
+**Request Body**:
+```json
+{
+  "status": 0
+}
+```
+- `status`: `0` = disabled, `1` = enabled
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "状态更新成功"
+}
+```
+
+---
+
 ### `GET /api/security/logs`
 
 **Changes**: Adds `start_time`, `end_time`, and `model_name` query parameters.
@@ -233,6 +291,13 @@ Check whether legacy Sensitive Words data has been migrated to the new system.
 ---
 
 ## DTO Changes
+
+### `SecurityGroupRequest`
+
+**Added field**:
+```go
+Status int `json:"status" binding:"oneof=0 1"`  // 0 = disabled, 1 = enabled
+```
 
 ### `SecurityPolicyRequest` / `SecurityPolicyResponse`
 
