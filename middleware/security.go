@@ -267,6 +267,7 @@ func replaceContentInRequest(body []byte, oldContent, newContent string) []byte 
 }
 
 // replaceMaskedRequest 将 Mask 后的内容按消息粒度写回请求体，保留所有其他字段
+// 仅处理最后一条 user 消息，与 extractContentFromRequest 的检测范围保持一致
 func replaceMaskedRequest(body []byte, result *security.DetectionResult) ([]byte, bool) {
 	if !result.Detected || result.Action != constant.SecurityActionMask || len(result.Matches) == 0 {
 		return body, false
@@ -283,83 +284,47 @@ func replaceMaskedRequest(body []byte, result *security.DetectionResult) ([]byte
 		return body, false
 	}
 
-	type msgRef struct {
-		index   int
-		content string
-		start   int
-		end     int
-	}
-	var refs []msgRef
-	var joined strings.Builder
-	for i, raw := range messages {
+	// 找到最后一条 user 消息
+	var lastUserIndex = -1
+	var lastUserContent string
+	for i := len(messages) - 1; i >= 0; i-- {
 		var msg struct {
 			Role    string `json:"role"`
 			Content string `json:"content"`
 		}
-		if err := common.Unmarshal(raw, &msg); err != nil {
+		if err := common.Unmarshal(messages[i], &msg); err != nil {
 			continue
 		}
 		if msg.Role == "user" && msg.Content != "" {
-			if joined.Len() > 0 {
-				joined.WriteByte('\n')
-			}
-			start := joined.Len()
-			joined.WriteString(msg.Content)
-			refs = append(refs, msgRef{index: i, content: msg.Content, start: start, end: joined.Len()})
+			lastUserIndex = i
+			lastUserContent = msg.Content
+			break
 		}
 	}
 
-	if len(refs) == 0 {
+	if lastUserIndex < 0 || lastUserContent == "" {
 		return body, false
 	}
 
-	// 单条消息：沿用整体字符串替换
-	if len(refs) == 1 {
-		newBody := []byte(strings.Replace(string(body), refs[0].content, result.ProcessedContent, -1))
-		return newBody, !bytes.Equal(newBody, body)
-	}
-
-	// 多条消息：按消息偏移量拆分 matches，逐条脱敏
-	modified := false
-	for _, ref := range refs {
-		var matches []*dto.SecurityMatchResult
-		for _, m := range result.Matches {
-			if m.Position[0] >= ref.start && m.Position[1] <= ref.end {
-				adjusted := *m
-				adjusted.Position[0] -= ref.start
-				adjusted.Position[1] -= ref.start
-				matches = append(matches, &adjusted)
-			}
-		}
-		if len(matches) == 0 {
-			continue
-		}
-
-		masked := security.ApplyMasking(ref.content, matches, nil)
-		if masked == ref.content {
-			continue
-		}
-
-		var msgMap map[string]json.RawMessage
-		if err := common.Unmarshal(messages[ref.index], &msgMap); err != nil {
-			continue
-		}
-		contentBytes, err := common.Marshal(masked)
-		if err != nil {
-			continue
-		}
-		msgMap["content"] = contentBytes
-		newMsg, err := common.Marshal(msgMap)
-		if err != nil {
-			continue
-		}
-		messages[ref.index] = newMsg
-		modified = true
-	}
-
-	if !modified {
+	masked := security.ApplyMasking(lastUserContent, result.Matches, nil)
+	if masked == lastUserContent {
 		return body, false
 	}
+
+	var msgMap map[string]json.RawMessage
+	if err := common.Unmarshal(messages[lastUserIndex], &msgMap); err != nil {
+		return body, false
+	}
+	contentBytes, err := common.Marshal(masked)
+	if err != nil {
+		return body, false
+	}
+	msgMap["content"] = contentBytes
+	newMsg, err := common.Marshal(msgMap)
+	if err != nil {
+		return body, false
+	}
+	messages[lastUserIndex] = newMsg
 
 	messagesBytes, err := common.Marshal(messages)
 	if err != nil {
@@ -528,7 +493,8 @@ func isChatCompletionEndpoint(path string) bool {
 	return strings.HasSuffix(path, "/chat/completions") || strings.HasSuffix(path, "/completions")
 }
 
-// extractContentFromRequest 从请求体中提取用户内容
+// extractContentFromRequest 从请求体中提取最后一条用户消息内容
+// 仅检测当前用户输入，避免历史消息中的已检测内容导致重复误报
 func extractContentFromRequest(body []byte) string {
 	var req struct {
 		Messages []struct {
@@ -541,14 +507,14 @@ func extractContentFromRequest(body []byte) string {
 		return ""
 	}
 
-	var contents []string
-	for _, msg := range req.Messages {
-		if msg.Role == "user" && msg.Content != "" {
-			contents = append(contents, msg.Content)
+	// 只取最后一条 role=user 的消息，避免历史消息重复触发拦截
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "user" && req.Messages[i].Content != "" {
+			return req.Messages[i].Content
 		}
 	}
 
-	return strings.Join(contents, "\n")
+	return ""
 }
 
 // extractModelFromRequest 从请求体中提取模型名称
