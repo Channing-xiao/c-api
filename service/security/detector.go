@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,15 @@ type DetectionLogContext struct {
 	RequestID string
 	ChannelID int
 	TokenID   int
+}
+
+// MaskConfig 脱敏配置（通过规则 extra_config JSON 字段配置）
+type MaskConfig struct {
+	MaskType      string `json:"mask_type"`      // full: 整体替换（默认）; preserve: 保留前后
+	PreserveStart int    `json:"preserve_start"` // 保留前 N 位
+	PreserveEnd   int    `json:"preserve_end"`   // 保留后 N 位
+	MaskChar      string `json:"mask_char"`      // 替换字符，默认 *
+	ReplaceWith   string `json:"replace_with"`   // 整体替换时的固定字符串（优先级高于 MaskChar）
 }
 
 // DetectionResult 检测结果
@@ -341,6 +351,16 @@ func applyMasking(content string, matches []*dto.SecurityMatchResult, rules []*m
 		return content
 	}
 
+	// 构建规则 ID -> 脱敏配置的映射
+	ruleConfigMap := make(map[int64]*MaskConfig)
+	for _, rule := range rules {
+		if rule == nil {
+			continue
+		}
+		config := parseMaskConfig(rule.ExtraConfig)
+		ruleConfigMap[rule.ID] = config
+	}
+
 	// 按位置降序排序（从后往前替换，避免位置偏移）
 	sortedMatches := make([]*dto.SecurityMatchResult, len(matches))
 	copy(sortedMatches, matches)
@@ -356,15 +376,61 @@ func applyMasking(content string, matches []*dto.SecurityMatchResult, rules []*m
 		if match.Position[0] < 0 || match.Position[1] > len(result) {
 			continue
 		}
-		masked := maskText(result[match.Position[0]:match.Position[1]])
+		config := ruleConfigMap[match.RuleID]
+		matchedText := result[match.Position[0]:match.Position[1]]
+		masked := maskText(matchedText, config)
 		result = result[:match.Position[0]] + masked + result[match.Position[1]:]
 	}
 
 	return result
 }
 
-// maskText 对文本进行脱敏处理（命中关键字整体替换为 ***）
-func maskText(text string) string {
+// parseMaskConfig 解析规则的 extra_config 脱敏配置
+func parseMaskConfig(extraConfig string) *MaskConfig {
+	if extraConfig == "" {
+		return nil
+	}
+	var config MaskConfig
+	if err := common.UnmarshalJsonStr(extraConfig, &config); err != nil {
+		common.SysLog(fmt.Sprintf("[security:mask] 解析 extra_config 失败: %v", err))
+		return nil
+	}
+	// 默认替换字符
+	if config.MaskChar == "" {
+		config.MaskChar = "*"
+	}
+	return &config
+}
+
+// maskText 对文本进行脱敏处理
+// 默认整体替换为 ***；若配置 mask_type=preserve 则保留前后指定位数
+func maskText(text string, config *MaskConfig) string {
+	if config == nil || config.MaskType == "" || config.MaskType == "full" {
+		if config != nil && config.ReplaceWith != "" {
+			return config.ReplaceWith
+		}
+		return "***"
+	}
+
+	if config.MaskType == "preserve" {
+		runes := []rune(text)
+		length := len(runes)
+		start := config.PreserveStart
+		end := config.PreserveEnd
+		if start < 0 {
+			start = 0
+		}
+		if end < 0 {
+			end = 0
+		}
+		// 保留位数超过或等于文本长度时，直接整体替换
+		if start+end >= length {
+			return config.MaskChar
+		}
+		maskLen := length - start - end
+		return string(runes[:start]) + strings.Repeat(config.MaskChar, maskLen) + string(runes[length-end:])
+	}
+
 	return "***"
 }
 
