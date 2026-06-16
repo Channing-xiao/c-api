@@ -75,7 +75,8 @@ func (rd *RegexDetector) Detect(content string, rules []*model.SecurityRule) (*E
 			continue
 		}
 
-		if match != nil {
+		// 遍历该正则的所有命中位置
+		for match != nil {
 			result.Detected = true
 			if rule.RiskScore > result.RiskScore {
 				result.RiskScore = rule.RiskScore
@@ -95,6 +96,11 @@ func (rd *RegexDetector) Detect(content string, rules []*model.SecurityRule) (*E
 				MatchedText: matchedText,
 				Position:    [2]int{start, end},
 			})
+
+			match, err = re.FindNextMatch(match)
+			if err != nil {
+				break
+			}
 		}
 	}
 

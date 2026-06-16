@@ -16,6 +16,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DetectionLogContext 命中日志上下文信息
+// 用于把请求链路中的 request_id、channel_id、token_id 写入安全日志，与网关请求日志关联
+type DetectionLogContext struct {
+	RequestID string
+	ChannelID int
+	TokenID   int
+}
+
 // DetectionResult 检测结果
 type DetectionResult struct {
 	Detected         bool
@@ -68,7 +76,7 @@ func GetDetectionEngine() *DetectionEngine {
 }
 
 // Detect 执行内容检测
-func (de *DetectionEngine) Detect(ctx context.Context, userID int, content string, contentType int, modelName string) (*DetectionResult, error) {
+func (de *DetectionEngine) Detect(ctx context.Context, userID int, content string, contentType int, modelName string, logCtx DetectionLogContext) (*DetectionResult, error) {
 	result := &DetectionResult{
 		Detected:      false,
 		Action:        constant.SecurityActionPass,
@@ -240,7 +248,7 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	}
 
 	// 异步记录日志
-	go recordHitLog(userID, content, result, contentType, modelName)
+	go recordHitLog(userID, content, result, contentType, modelName, logCtx)
 
 	return result, nil
 }
@@ -361,7 +369,7 @@ func maskText(text string) string {
 }
 
 // recordHitLog 记录命中日志
-func recordHitLog(userID int, originalContent string, result *DetectionResult, contentType int, modelName string) {
+func recordHitLog(userID int, originalContent string, result *DetectionResult, contentType int, modelName string, logCtx DetectionLogContext) {
 	defer func() {
 		if r := recover(); r != nil {
 			common.SysLog(fmt.Sprintf("记录安全日志 panic: %v", r))
@@ -382,12 +390,17 @@ func recordHitLog(userID int, originalContent string, result *DetectionResult, c
 		groupID = result.Matches[0].GroupID
 	}
 
+	requestID := logCtx.RequestID
+	if requestID == "" {
+		requestID = generateRequestID()
+	}
+
 	log := &model.SecurityHitLog{
-		RequestID:           generateRequestID(),
+		RequestID:           requestID,
 		UserID:              userID,
-		ChannelID:           0,
+		ChannelID:           logCtx.ChannelID,
 		ModelName:           modelName,
-		TokenID:             0,
+		TokenID:             logCtx.TokenID,
 		RuleID:              ruleID,
 		GroupID:             groupID,
 		ContentType:         contentType,

@@ -56,6 +56,9 @@ func SecurityCheck() gin.HandlerFunc {
 		}
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
+		// 标记是否为流式请求，供响应检测中间件决策
+		c.Set("security_stream", isStreamingRequest(bodyBytes))
+
 		// 解析请求内容
 		content := extractContentFromRequest(bodyBytes)
 		if content == "" {
@@ -67,7 +70,12 @@ func SecurityCheck() gin.HandlerFunc {
 
 		// 执行检测
 		ctx := context.Background()
-		result, err := security.GetDetectionEngine().Detect(ctx, userId, content, constant.SecurityContentTypeRequest, modelName)
+		logCtx := security.DetectionLogContext{
+			RequestID: c.GetString(common.RequestIdKey),
+			ChannelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+			TokenID:   c.GetInt("token_id"),
+		}
+		result, err := security.GetDetectionEngine().Detect(ctx, userId, content, constant.SecurityContentTypeRequest, modelName, logCtx)
 		if err != nil {
 			common.SysLog("安全检测错误: " + err.Error())
 			c.Next()
@@ -122,6 +130,12 @@ func SecurityCheckResponse() gin.HandlerFunc {
 			return
 		}
 
+		// 流式响应直接透传，避免整段缓冲破坏实时性
+		if c.GetBool("security_stream") {
+			c.Next()
+			return
+		}
+
 		// 使用自定义 ResponseWriter 拦截响应
 		blw := &bufferedResponseWriter{ResponseWriter: c.Writer, body: &bytes.Buffer{}}
 		c.Writer = blw
@@ -157,7 +171,12 @@ func SecurityCheckResponse() gin.HandlerFunc {
 
 		// 执行检测
 		ctx := context.Background()
-		result, err := security.GetDetectionEngine().Detect(ctx, userId, content, constant.SecurityContentTypeResponse, "")
+		logCtx := security.DetectionLogContext{
+			RequestID: c.GetString(common.RequestIdKey),
+			ChannelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+			TokenID:   c.GetInt("token_id"),
+		}
+		result, err := security.GetDetectionEngine().Detect(ctx, userId, content, constant.SecurityContentTypeResponse, "", logCtx)
 		if err != nil {
 			common.SysLog("响应安全检测错误: " + err.Error())
 			blw.flushOriginal()
@@ -233,6 +252,7 @@ func (w *bufferedResponseWriter) Flush() {
 }
 
 // extractContentFromResponse 从响应体中提取 AI 生成的内容
+// 支持 OpenAI chat.completions（message/delta）和 Claude /messages（content blocks）
 func extractContentFromResponse(body []byte) string {
 	var resp struct {
 		Choices []struct {
@@ -243,6 +263,11 @@ func extractContentFromResponse(body []byte) string {
 				Content string `json:"content"`
 			} `json:"delta"`
 		} `json:"choices"`
+		// Claude /messages 非流式响应格式
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
 	}
 
 	if err := common.Unmarshal(body, &resp); err != nil {
@@ -255,6 +280,11 @@ func extractContentFromResponse(body []byte) string {
 			contents = append(contents, choice.Message.Content)
 		} else if choice.Delta.Content != "" {
 			contents = append(contents, choice.Delta.Content)
+		}
+	}
+	for _, block := range resp.Content {
+		if block.Type == "text" && block.Text != "" {
+			contents = append(contents, block.Text)
 		}
 	}
 
@@ -490,7 +520,9 @@ func getMatchDetails(matches []*dto.SecurityMatchResult) []gin.H {
 
 // isChatCompletionEndpoint 判断是否为聊天补全接口
 func isChatCompletionEndpoint(path string) bool {
-	return strings.HasSuffix(path, "/chat/completions") || strings.HasSuffix(path, "/completions")
+	return strings.HasSuffix(path, "/chat/completions") ||
+		strings.HasSuffix(path, "/completions") ||
+		strings.HasSuffix(path, "/messages")
 }
 
 // extractContentFromRequest 从请求体中提取最后一条用户消息内容
@@ -526,6 +558,17 @@ func extractModelFromRequest(body []byte) string {
 		return ""
 	}
 	return req.Model
+}
+
+// isStreamingRequest 判断请求体是否声明 stream=true
+func isStreamingRequest(body []byte) bool {
+	var req struct {
+		Stream bool `json:"stream"`
+	}
+	if err := common.Unmarshal(body, &req); err != nil {
+		return false
+	}
+	return req.Stream
 }
 
 // getBlockMessage 获取拦截提示消息

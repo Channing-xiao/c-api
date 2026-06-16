@@ -105,3 +105,36 @@ func TestKeywordDetector_Detect(t *testing.T) {
 		t.Fatalf("expected not detected when rule disabled")
 	}
 }
+
+func TestKeywordDetector_MultipleOccurrences(t *testing.T) {
+	detector := &KeywordDetector{}
+	rules := []*model.SecurityRule{
+		{
+			ID:        1,
+			GroupID:   1,
+			Type:      constant.SecurityRuleTypeKeyword,
+			Content:   "翻墙",
+			Action:    constant.SecurityActionMask,
+			RiskScore: 50,
+			Status:    constant.SecurityStatusEnabled,
+		},
+	}
+
+	content := "我要翻墙，翻墙后访问，再翻墙回来"
+	result, err := detector.Detect(content, rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Detected {
+		t.Fatalf("expected detected")
+	}
+	if len(result.Matches) != 3 {
+		t.Fatalf("expected 3 matches, got %d", len(result.Matches))
+	}
+
+	masked := applyMasking(content, result.Matches, rules)
+	expected := "我要***，***后访问，再***回来"
+	if masked != expected {
+		t.Fatalf("expected %q, got %q", expected, masked)
+	}
+}

@@ -53,3 +53,36 @@ func TestRegexDetector_Detect(t *testing.T) {
 		t.Fatalf("expected not detected, got detected")
 	}
 }
+
+func TestRegexDetector_MultipleOccurrences(t *testing.T) {
+	detector := &RegexDetector{}
+	rules := []*model.SecurityRule{
+		{
+			ID:        1,
+			GroupID:   1,
+			Type:      constant.SecurityRuleTypeRegex,
+			Content:   `1[3-9]\d{9}`,
+			Action:    constant.SecurityActionMask,
+			RiskScore: 70,
+			Status:    constant.SecurityStatusEnabled,
+		},
+	}
+
+	content := "请联系 13800138000 或 13900139000"
+	result, err := detector.Detect(content, rules)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Detected {
+		t.Fatalf("expected detected")
+	}
+	if len(result.Matches) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(result.Matches))
+	}
+
+	masked := applyMasking(content, result.Matches, rules)
+	expected := "请联系 *** 或 ***"
+	if masked != expected {
+		t.Fatalf("expected %q, got %q", expected, masked)
+	}
+}

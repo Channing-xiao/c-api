@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
@@ -395,7 +396,11 @@ func CheckSecurityRequest(c *gin.Context) {
 		return
 	}
 
-	result, err := security.GetDetectionEngine().Detect(c.Request.Context(), req.UserID, req.Content, constant.SecurityContentTypeRequest, req.ModelName)
+	result, err := security.GetDetectionEngine().Detect(c.Request.Context(), req.UserID, req.Content, constant.SecurityContentTypeRequest, req.ModelName, security.DetectionLogContext{
+		RequestID: c.GetString(common.RequestIdKey),
+		ChannelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		TokenID:   c.GetInt("token_id"),
+	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -435,7 +440,11 @@ func CheckSecurityResponse(c *gin.Context) {
 		return
 	}
 
-	result, err := security.GetDetectionEngine().Detect(c.Request.Context(), req.UserID, req.Content, constant.SecurityContentTypeResponse, req.ModelName)
+	result, err := security.GetDetectionEngine().Detect(c.Request.Context(), req.UserID, req.Content, constant.SecurityContentTypeResponse, req.ModelName, security.DetectionLogContext{
+		RequestID: c.GetString(common.RequestIdKey),
+		ChannelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+		TokenID:   c.GetInt("token_id"),
+	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

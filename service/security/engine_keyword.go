@@ -84,63 +84,59 @@ func (kd *KeywordDetector) Detect(content string, rules []*model.SecurityRule) (
 	}
 	runeToByte[len(contentRunes)] = byteIdx
 
-	// 建立关键词到规则列表的映射
+	// 建立小写关键词到规则列表的映射
 	keywordRuleMap := make(map[string][]keywordRule)
 	for _, kr := range keywordRules {
 		lk := strings.ToLower(kr.keyword)
 		keywordRuleMap[lk] = append(keywordRuleMap[lk], kr)
 	}
 
-	// 每个关键词只取第一次命中的位置（与原 string.Index 行为一致）
-	type hitInfo struct {
-		pos  int
-		word []rune
+	// 收集所有命中位置，同一规则在同一位置去重
+	type matchKey struct {
+		ruleID int64
+		start  int
+		end    int
 	}
-	keywordFirstHit := make(map[string]hitInfo)
+	seenMatches := make(map[matchKey]bool)
+	seenWords := make(map[string]bool)
+
 	for _, hit := range hits {
 		word := string(hit.Word)
-		if _, ok := keywordFirstHit[word]; !ok {
-			keywordFirstHit[word] = hitInfo{pos: hit.Pos, word: hit.Word}
-		}
-	}
-
-	matchedRules := make(map[int64]bool)
-
-	for _, kr := range keywordRules {
-		rule := kr.rule
-		if matchedRules[rule.ID] {
-			continue
-		}
-
-		lk := strings.ToLower(kr.keyword)
-		info, ok := keywordFirstHit[lk]
+		rulesForWord, ok := keywordRuleMap[word]
 		if !ok {
 			continue
 		}
+		seenWords[word] = true
+		start := runeToByte[hit.Pos]
+		end := runeToByte[hit.Pos+len(hit.Word)]
 
-		matchedRules[rule.ID] = true
-		start := runeToByte[info.pos]
-		end := runeToByte[info.pos+len(info.word)]
+		for _, kr := range rulesForWord {
+			key := matchKey{ruleID: kr.rule.ID, start: start, end: end}
+			if seenMatches[key] {
+				continue
+			}
+			seenMatches[key] = true
 
-		result.Detected = true
-		if rule.RiskScore > result.RiskScore {
-			result.RiskScore = rule.RiskScore
+			result.Detected = true
+			if kr.rule.RiskScore > result.RiskScore {
+				result.RiskScore = kr.rule.RiskScore
+			}
+			result.Matches = append(result.Matches, &dto.SecurityMatchResult{
+				RuleID:      kr.rule.ID,
+				GroupID:     kr.rule.GroupID,
+				Type:        kr.rule.Type,
+				MatchedText: content[start:end],
+				Position:    [2]int{start, end},
+			})
 		}
-		result.Matches = append(result.Matches, &dto.SecurityMatchResult{
-			RuleID:      rule.ID,
-			GroupID:     rule.GroupID,
-			Type:        rule.Type,
-			MatchedText: content[start:end],
-			Position:    [2]int{start, end},
-		})
 	}
 
 	var matchedRuleIDs []int64
 	var matchedWords []string
-	for id := range matchedRules {
-		matchedRuleIDs = append(matchedRuleIDs, id)
+	for id := range seenMatches {
+		matchedRuleIDs = append(matchedRuleIDs, id.ruleID)
 	}
-	for word := range keywordFirstHit {
+	for word := range seenWords {
 		matchedWords = append(matchedWords, word)
 	}
 	common.SysLog(fmt.Sprintf("[security:keyword] keywords=%d hits=%d detected=%v matchedRules=%v matchedWords=%v",
