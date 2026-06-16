@@ -102,6 +102,12 @@ func SecurityCheck() gin.HandlerFunc {
 				}
 				c.Request.Body = io.NopCloser(bytes.NewBuffer(newBody))
 				c.Request.ContentLength = int64(len(newBody))
+				// 同步更新 BodyStorage，避免下游通过 GetRequestBody/GetBodyStorage 拿到原始未脱敏内容
+				if bs, err := common.CreateBodyStorage(newBody); err == nil {
+					c.Set(common.KeyBodyStorage, bs)
+				} else {
+					common.SysLog("BodyStorage 同步失败: " + err.Error())
+				}
 			}
 		}
 
@@ -573,8 +579,8 @@ func isStreamingRequest(body []byte) bool {
 
 // getBlockMessage 获取拦截提示消息
 func getBlockMessage(userId int) string {
-	// 尝试获取用户的自定义拦截消息
-	policies, err := security.GetUserPolicies(userId)
+	// 尝试从缓存获取用户的自定义拦截消息，避免拦截热路径直接查库
+	policies, err := security.GetCachedUserPolicies(userId)
 	if err != nil {
 		return "请求包含敏感内容，已被拦截。"
 	}

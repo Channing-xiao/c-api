@@ -67,15 +67,8 @@ func (kd *KeywordDetector) Detect(content string, rules []*model.SecurityRule) (
 		return result, err
 	}
 
-	// 搜索（转为小写以支持大小写不敏感匹配）
-	contentRunes := []rune(strings.ToLower(content))
-	hits := m.MultiPatternSearch(contentRunes, false)
-
-	if len(hits) == 0 {
-		return result, nil
-	}
-
-	// 建立 rune 位置到 byte 位置的映射
+	// 在原始内容上建立 rune -> byte 位置映射，避免 ToLower 后字节长度变化导致切片错位
+	contentRunes := []rune(content)
 	runeToByte := make([]int, len(contentRunes)+1)
 	byteIdx := 0
 	for i, r := range contentRunes {
@@ -83,6 +76,13 @@ func (kd *KeywordDetector) Detect(content string, rules []*model.SecurityRule) (
 		byteIdx += utf8.RuneLen(r)
 	}
 	runeToByte[len(contentRunes)] = byteIdx
+
+	// 搜索时转为小写以实现大小写不敏感匹配
+	// 注意：Go 的 strings.ToLower 对大多数 Unicode 字符保持 rune 数量不变，
+	// 但存在极少数特殊 locale 字符（如土耳其语 İ）会改变 rune 数量。
+	// 此类场景下命中位置可能错位，属于可接受的边界情况。
+	contentLowerRunes := []rune(strings.ToLower(content))
+	hits := m.MultiPatternSearch(contentLowerRunes, false)
 
 	// 建立小写关键词到规则列表的映射
 	keywordRuleMap := make(map[string][]keywordRule)

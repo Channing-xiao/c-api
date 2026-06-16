@@ -434,13 +434,67 @@ func maskText(text string, config *MaskConfig) string {
 	return "***"
 }
 
-// recordHitLog 记录命中日志
+const (
+	hitLogChanSize       = 1000 // 命中日志缓冲通道大小
+	hitLogBatchSize      = 50  // 批量写入阈值
+	hitLogFlushInterval  = 2 * time.Second // 批量写入最大等待时间
+)
+
+var (
+	hitLogChan       chan *model.SecurityHitLog
+	hitLogWorkerOnce sync.Once
+)
+
+// initHitLogWorker 启动命中日志后台 worker（只执行一次）
+func initHitLogWorker() {
+	hitLogWorkerOnce.Do(func() {
+		hitLogChan = make(chan *model.SecurityHitLog, hitLogChanSize)
+		go hitLogWorker()
+	})
+}
+
+// hitLogWorker 批量消费命中日志并写入数据库
+func hitLogWorker() {
+	batch := make([]*model.SecurityHitLog, 0, hitLogBatchSize)
+	ticker := time.NewTicker(hitLogFlushInterval)
+	defer ticker.Stop()
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		if err := model.DB.CreateInBatches(batch, hitLogBatchSize).Error; err != nil {
+			common.SysLog("批量写入安全命中日志失败: " + err.Error())
+		}
+		batch = batch[:0]
+	}
+
+	for {
+		select {
+		case log, ok := <-hitLogChan:
+			if !ok {
+				flush()
+				return
+			}
+			batch = append(batch, log)
+			if len(batch) >= hitLogBatchSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
+// recordHitLog 异步记录命中日志
 func recordHitLog(userID int, originalContent string, result *DetectionResult, contentType int, modelName string, logCtx DetectionLogContext) {
 	defer func() {
 		if r := recover(); r != nil {
 			common.SysLog(fmt.Sprintf("记录安全日志 panic: %v", r))
 		}
 	}()
+
+	initHitLogWorker()
 
 	hash := sha256.Sum256([]byte(originalContent))
 	hashStr := hex.EncodeToString(hash[:])
@@ -478,9 +532,10 @@ func recordHitLog(userID int, originalContent string, result *DetectionResult, c
 		CreatedAt:           time.Now().Unix(),
 	}
 
-	err := model.DB.Create(log).Error
-	if err != nil {
-		common.SysLog("记录安全日志失败: " + err.Error())
+	select {
+	case hitLogChan <- log:
+	default:
+		common.SysLog("安全命中日志队列已满，丢弃一条日志")
 	}
 }
 

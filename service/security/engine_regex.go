@@ -2,7 +2,9 @@ package security
 
 import (
 	"fmt"
+	"math"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -12,8 +14,15 @@ import (
 	"github.com/dlclark/regexp2"
 )
 
+const regexCacheMaxSize = 1000
+
+type regexCacheEntry struct {
+	re       *regexp2.Regexp
+	lastUsed int64 // UnixNano，用于 LRU 淘汰
+}
+
 var (
-	regexCache   = make(map[string]*regexp2.Regexp)
+	regexCache   = make(map[string]*regexCacheEntry)
 	regexCacheMu sync.RWMutex
 )
 
@@ -24,10 +33,14 @@ func (rd *RegexDetector) Name() string { return "regex" }
 
 func (rd *RegexDetector) getCompiled(pattern string) (*regexp2.Regexp, error) {
 	regexCacheMu.RLock()
-	re, ok := regexCache[pattern]
+	entry, ok := regexCache[pattern]
 	regexCacheMu.RUnlock()
 	if ok {
-		return re, nil
+		// 更新最近使用时间
+		regexCacheMu.Lock()
+		entry.lastUsed = time.Now().UnixNano()
+		regexCacheMu.Unlock()
+		return entry.re, nil
 	}
 
 	re, err := regexp2.Compile(pattern, 0)
@@ -36,8 +49,24 @@ func (rd *RegexDetector) getCompiled(pattern string) (*regexp2.Regexp, error) {
 	}
 
 	regexCacheMu.Lock()
-	regexCache[pattern] = re
-	regexCacheMu.Unlock()
+	defer regexCacheMu.Unlock()
+
+	// 缓存达到上限时淘汰最久未使用的条目
+	if len(regexCache) >= regexCacheMaxSize {
+		var oldestKey string
+		var oldestTime int64 = math.MaxInt64
+		for k, v := range regexCache {
+			if v.lastUsed < oldestTime {
+				oldestTime = v.lastUsed
+				oldestKey = k
+			}
+		}
+		if oldestKey != "" {
+			delete(regexCache, oldestKey)
+		}
+	}
+
+	regexCache[pattern] = &regexCacheEntry{re: re, lastUsed: time.Now().UnixNano()}
 	return re, nil
 }
 
