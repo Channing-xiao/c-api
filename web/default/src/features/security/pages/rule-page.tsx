@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FileText, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { EmptyState } from '@/components/empty-state'
 import { securityApi, type SecurityGroup, type SecurityRule } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
 import { RuleFormModal } from '../components/rule-form-modal'
@@ -130,7 +132,7 @@ export function SecurityRulePage() {
   if (loading) {
     return (
       <SecurityPageLayout>
-        <div className="space-y-4 p-6">
+        <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-32 w-full" />
         </div>
@@ -140,101 +142,128 @@ export function SecurityRulePage() {
 
   return (
     <SecurityPageLayout
-      actions={<Button onClick={handleCreate}>{t('Create Rule')}</Button>}
+      actions={
+        <Button onClick={handleCreate}>
+          <Plus className="mr-1.5 size-4" />
+          {t('Create Rule')}
+        </Button>
+      }
     >
       <div className="space-y-4">
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border p-3">
-          <span className="text-sm">{t('{{count}} selected', { count: selectedIds.size })}</span>
-          <Button variant="outline" size="sm" onClick={() => { setBatchAction('enable'); setBatchConfirmOpen(true) }}>
-            {t('Batch Enable')}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => { setBatchAction('disable'); setBatchConfirmOpen(true) }}>
-            {t('Batch Disable')}
-          </Button>
-          <Button variant="destructive" size="sm" onClick={() => { setBatchAction('delete'); setBatchConfirmOpen(true) }}>
-            {t('Batch Delete')}
-          </Button>
-        </div>
-      )}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={selectedIds.size > 0 && selectedIds.size === rules.length}
-                    onCheckedChange={toggleSelectAll}
-                  />
-                </TableHead>
-                <TableHead>{t('Name')}</TableHead>
-                <TableHead>{t('Group')}</TableHead>
-                <TableHead>{t('Type')}</TableHead>
-                <TableHead>{t('Action')}</TableHead>
-                <TableHead>{t('Risk Score')}</TableHead>
-                <TableHead className="text-right">{t('Actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(rule.id)}
-                      onCheckedChange={() => toggleSelect(rule.id)}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell>{rule.group_name}</TableCell>
-                  <TableCell><Badge variant="outline">{getLabel(ruleTypes, rule.type)}</Badge></TableCell>
-                  <TableCell><Badge>{getLabel(actions, rule.action)}</Badge></TableCell>
-                  <TableCell>{rule.risk_score}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => openTest(rule)}>{t('Test')}</Button>
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(rule)}>{t('Edit')}</Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(rule.id)}>
-                      {t('Delete')}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/30 p-3">
+            <span className="text-sm font-medium">
+              {t('{{count}} selected', { count: selectedIds.size })}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setBatchAction('enable'); setBatchConfirmOpen(true) }}>
+                {t('Batch Enable')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setBatchAction('disable'); setBatchConfirmOpen(true) }}>
+                {t('Batch Disable')}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => { setBatchAction('delete'); setBatchConfirmOpen(true) }}>
+                <Trash2 className="mr-1.5 size-3.5" />
+                {t('Batch Delete')}
+              </Button>
+            </div>
+          </div>
+        )}
 
-      <RuleFormModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        initialData={editingRule}
-        groups={groups}
-        onSubmit={handleSubmit}
-      />
+        <Card>
+          <CardContent className="p-0">
+            {rules.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title={t('No Rules')}
+                description={t('Create your first security rule to start detecting risky content.')}
+                action={
+                  <Button onClick={handleCreate}>
+                    <Plus className="mr-1.5 size-4" />
+                    {t('Create Rule')}
+                  </Button>
+                }
+                className="min-h-[260px]"
+                bordered={false}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={selectedIds.size > 0 && selectedIds.size === rules.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>{t('Name')}</TableHead>
+                    <TableHead>{t('Group')}</TableHead>
+                    <TableHead>{t('Type')}</TableHead>
+                    <TableHead>{t('Action')}</TableHead>
+                    <TableHead>{t('Risk Score')}</TableHead>
+                    <TableHead className="text-right">{t('Actions')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rules.map((rule) => (
+                    <TableRow key={rule.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(rule.id)}
+                          onCheckedChange={() => toggleSelect(rule.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{rule.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{rule.group_name}</TableCell>
+                      <TableCell><Badge variant="outline">{getLabel(ruleTypes, rule.type)}</Badge></TableCell>
+                      <TableCell><Badge>{getLabel(actions, rule.action)}</Badge></TableCell>
+                      <TableCell>{rule.risk_score}</TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => openTest(rule)}>{t('Test')}</Button>
+                        <Button variant="outline" size="sm" onClick={() => handleEdit(rule)}>{t('Edit')}</Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDelete(rule.id)}>
+                          {t('Delete')}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      {testRuleId != null && (
-        <RuleTester
-          ruleId={testRuleId}
-          ruleName={testRuleName}
-          open={testModalOpen}
-          onOpenChange={setTestModalOpen}
+        <RuleFormModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          initialData={editingRule}
+          groups={groups}
+          onSubmit={handleSubmit}
         />
-      )}
 
-      <ConfirmDialog
-        open={batchConfirmOpen}
-        onOpenChange={setBatchConfirmOpen}
-        title={
-          batchAction === 'delete'
-            ? t('Confirm Batch Delete')
-            : batchAction === 'enable'
-            ? t('Confirm Batch Enable')
-            : t('Confirm Batch Disable')
-        }
-        desc={t('This action will affect {{count}} rules.', { count: selectedIds.size })}
-        handleConfirm={handleBatchAction}
-        destructive={batchAction === 'delete'}
-      />
+        {testRuleId != null && (
+          <RuleTester
+            ruleId={testRuleId}
+            ruleName={testRuleName}
+            open={testModalOpen}
+            onOpenChange={setTestModalOpen}
+          />
+        )}
+
+        <ConfirmDialog
+          open={batchConfirmOpen}
+          onOpenChange={setBatchConfirmOpen}
+          title={
+            batchAction === 'delete'
+              ? t('Confirm Batch Delete')
+              : batchAction === 'enable'
+              ? t('Confirm Batch Enable')
+              : t('Confirm Batch Disable')
+          }
+          desc={t('This action will affect {{count}} rules.', { count: selectedIds.size })}
+          handleConfirm={handleBatchAction}
+          destructive={batchAction === 'delete'}
+        />
       </div>
     </SecurityPageLayout>
   )

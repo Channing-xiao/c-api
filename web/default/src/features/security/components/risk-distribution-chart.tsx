@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { PieChart } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
@@ -7,7 +8,8 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from '@/components/ui/chart'
-import { PieChart, Pie, Cell } from 'recharts'
+import { PieChart as RePieChart, Pie, Cell } from 'recharts'
+import { EmptyState } from '@/components/empty-state'
 
 interface RiskDistributionChartProps {
   data: {
@@ -38,26 +40,31 @@ export function RiskDistributionChart({ data }: RiskDistributionChartProps) {
   const total = data.low + data.medium + data.high + data.critical
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex flex-col">
+      <CardHeader className="flex flex-row items-center gap-2">
+        <PieChart className="size-4 text-muted-foreground" />
         <CardTitle>{t('Risk Distribution')}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {total === 0 ? (
-          <div className="text-muted-foreground text-sm py-8 text-center">
-            {t('No data')}
-          </div>
+          <EmptyState
+            icon={PieChart}
+            title={t('No Data')}
+            description={t('No risk distribution data for the selected period.')}
+            className="min-h-[200px] rounded-lg border border-dashed"
+            bordered={false}
+          />
         ) : (
-          <ChartContainer config={config} className="min-h-[240px]">
-            <PieChart>
+          <ChartContainer config={config} className="min-h-[260px]">
+            <RePieChart>
               <Pie
                 data={chartData}
                 dataKey="value"
                 nameKey="key"
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
+                innerRadius={70}
+                outerRadius={90}
                 paddingAngle={2}
               >
                 {chartData.map((entry) => (
@@ -76,7 +83,7 @@ export function RiskDistributionChart({ data }: RiskDistributionChartProps) {
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-            </PieChart>
+            </RePieChart>
           </ChartContainer>
         )}
       </CardContent>

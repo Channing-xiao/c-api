@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Plus, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/empty-state'
 import { securityApi, type SecurityGroup, type SecurityPolicy } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
 import { PolicyFormModal } from '../components/policy-form-modal'
@@ -76,7 +78,7 @@ export function SecurityPolicyPage() {
   if (loading) {
     return (
       <SecurityPageLayout>
-        <div className="space-y-4 p-6">
+        <div className="space-y-4">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-32 w-full" />
         </div>
@@ -86,50 +88,71 @@ export function SecurityPolicyPage() {
 
   return (
     <SecurityPageLayout
-      actions={<Button onClick={handleCreate}>{t('Create Policy')}</Button>}
+      actions={
+        <Button onClick={handleCreate}>
+          <Plus className="mr-1.5 size-4" />
+          {t('Create Policy')}
+        </Button>
+      }
     >
       <div className="space-y-4">
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('User')}</TableHead>
-                <TableHead>{t('Group')}</TableHead>
-                <TableHead>{t('Scope')}</TableHead>
-                <TableHead>{t('Default Action')}</TableHead>
-                <TableHead>{t('Priority')}</TableHead>
-                <TableHead className="text-right">{t('Actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {policies.map((policy) => (
-                <TableRow key={policy.id}>
-                  <TableCell className="font-medium">{policy.user_name}</TableCell>
-                  <TableCell>{policy.group_name}</TableCell>
-                  <TableCell><Badge variant="outline">{getLabel(scopes, policy.scope)}</Badge></TableCell>
-                  <TableCell><Badge>{getLabel(actions, policy.default_action)}</Badge></TableCell>
-                  <TableCell>{policy.priority ?? 0}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(policy)}>{t('Edit')}</Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(policy.id)}>
-                      {t('Delete')}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardContent className="p-0">
+            {policies.length === 0 ? (
+              <EmptyState
+                icon={ShieldCheck}
+                title={t('No Policies')}
+                description={t('Create a policy to assign rule groups to users and define default actions.')}
+                action={
+                  <Button onClick={handleCreate}>
+                    <Plus className="mr-1.5 size-4" />
+                    {t('Create Policy')}
+                  </Button>
+                }
+                className="min-h-[260px]"
+                bordered={false}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('User')}</TableHead>
+                    <TableHead>{t('Group')}</TableHead>
+                    <TableHead>{t('Scope')}</TableHead>
+                    <TableHead>{t('Default Action')}</TableHead>
+                    <TableHead>{t('Priority')}</TableHead>
+                    <TableHead className="text-right">{t('Actions')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {policies.map((policy) => (
+                    <TableRow key={policy.id}>
+                      <TableCell className="font-medium">{policy.user_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{policy.group_name}</TableCell>
+                      <TableCell><Badge variant="outline">{getLabel(scopes, policy.scope)}</Badge></TableCell>
+                      <TableCell><Badge>{getLabel(actions, policy.default_action)}</Badge></TableCell>
+                      <TableCell>{policy.priority ?? 0}</TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEdit(policy)}>{t('Edit')}</Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleDelete(policy.id)}>
+                          {t('Delete')}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      <PolicyFormModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        initialData={editingPolicy}
-        groups={groups}
-        onSubmit={handleSubmit}
-      />
+        <PolicyFormModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          initialData={editingPolicy}
+          groups={groups}
+          onSubmit={handleSubmit}
+        />
       </div>
     </SecurityPageLayout>
   )

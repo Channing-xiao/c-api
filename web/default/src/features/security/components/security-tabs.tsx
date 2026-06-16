@@ -1,13 +1,20 @@
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from '@tanstack/react-router'
-import { cn } from '@/lib/utils'
+import {
+  LayoutDashboard,
+  FolderOpen,
+  FileText,
+  ShieldCheck,
+  ScrollText,
+} from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const tabs = [
-  { key: 'dashboard', label: 'Dashboard', path: '/security' },
-  { key: 'groups', label: 'Groups', path: '/security/groups' },
-  { key: 'rules', label: 'Rules', path: '/security/rules' },
-  { key: 'policies', label: 'Policies', path: '/security/policies' },
-  { key: 'logs', label: 'Audit Logs', path: '/security/logs' },
+  { key: 'dashboard', label: 'Dashboard', path: '/security', icon: LayoutDashboard },
+  { key: 'groups', label: 'Groups', path: '/security/groups', icon: FolderOpen },
+  { key: 'rules', label: 'Rules', path: '/security/rules', icon: FileText },
+  { key: 'policies', label: 'Policies', path: '/security/policies', icon: ShieldCheck },
+  { key: 'logs', label: 'Audit Logs', path: '/security/logs', icon: ScrollText },
 ]
 
 export function SecurityTabs() {
@@ -19,26 +26,30 @@ export function SecurityTabs() {
     tabs.find((tab) => location.pathname.startsWith(tab.path))?.key ?? 'dashboard'
 
   return (
-    <div className="border-b">
-      <nav className="flex space-x-1 px-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => navigate({ to: tab.path })}
-            className={cn(
-              'relative px-4 py-3 text-sm font-medium transition-colors',
-              activeTab === tab.key
-                ? 'text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t(tab.label)}
-            {activeTab === tab.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-            )}
-          </button>
-        ))}
-      </nav>
+    <div className="border-b bg-card px-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const tab = tabs.find((t) => t.key === value)
+          if (tab) navigate({ to: tab.path })
+        }}
+      >
+        <TabsList variant="line" className="h-11 bg-transparent">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <TabsTrigger
+                key={tab.key}
+                value={tab.key}
+                className="gap-2 px-4 py-2"
+              >
+                <Icon className="size-4" />
+                {t(tab.label)}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
+      </Tabs>
     </div>
   )
 }

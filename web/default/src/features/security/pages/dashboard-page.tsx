@@ -1,5 +1,17 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  Activity,
+  AlertTriangle,
+  Bot,
+  CalendarClock,
+  CalendarDays,
+  Filter,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  Users,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -11,8 +23,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/empty-state'
 import { securityApi, type DashboardData } from '../api/security'
 import { SecurityPageLayout } from '../components/security-page-layout'
+import { SecurityStatCard } from '../components/security-stat-card'
 import { TopUsersTable } from '../components/top-users-table'
 
 const RiskDistributionChart = React.lazy(
@@ -72,6 +86,44 @@ export function SecurityDashboardPage() {
     return () => clearInterval(interval)
   }, [autoRefresh, timeRange])
 
+  const statItems = [
+    {
+      title: t('Total Detections'),
+      value: data?.summary?.total_detections ?? 0,
+      icon: Activity,
+      tone: 'default' as const,
+      description: t('All time detected content'),
+    },
+    {
+      title: t('Interceptions'),
+      value: data?.summary?.total_interceptions ?? 0,
+      icon: ShieldCheck,
+      tone: 'rose' as const,
+      description: t('Blocked or masked content'),
+    },
+    {
+      title: t('Alerts'),
+      value: data?.summary?.total_alerts ?? 0,
+      icon: AlertTriangle,
+      tone: 'amber' as const,
+      description: t('Flagged for review'),
+    },
+    {
+      title: t("Today's Detections"),
+      value: data?.summary?.today_detections ?? 0,
+      icon: CalendarDays,
+      tone: 'teal' as const,
+      description: t('In the last 24 hours'),
+    },
+    {
+      title: t("Today's Interceptions"),
+      value: data?.summary?.today_interceptions ?? 0,
+      icon: Shield,
+      tone: 'rose' as const,
+      description: t('In the last 24 hours'),
+    },
+  ]
+
   return (
     <SecurityPageLayout
       actions={
@@ -84,23 +136,32 @@ export function SecurityDashboardPage() {
             {autoRefresh ? t('Auto Refresh: ON') : t('Auto Refresh: OFF')}
           </Button>
           <Button variant="outline" size="sm" onClick={loadDashboard}>
+            <RefreshCw className="mr-1.5 size-3.5" />
             {t('Refresh')}
           </Button>
         </>
       }
     >
       <div className="space-y-6">
-        <div className="flex items-center justify-between rounded-lg border p-4">
-          <div>
-            <h3 className="text-sm font-medium">{t('Global Security Detection')}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t('Enable or disable AI content security detection globally.')}
-            </p>
-          </div>
-          <Switch checked={true} disabled={true} aria-readonly="true" />
-        </div>
+        <Card className="border-border/60 bg-gradient-to-r from-primary/5 via-transparent to-transparent">
+          <CardContent className="flex items-center justify-between gap-4 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium">{t('Global Security Detection')}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {t('Enable or disable AI content security detection globally.')}
+                </p>
+              </div>
+            </div>
+            <Switch checked={true} disabled={true} aria-readonly="true" />
+          </CardContent>
+        </Card>
 
         <div className="flex items-center gap-2">
+          <Filter className="size-4 text-muted-foreground" />
           <Select value={timeRange} onValueChange={(v) => setTimeRange(v ?? 'today')}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -113,77 +174,27 @@ export function SecurityDashboardPage() {
               ))}
             </SelectContent>
           </Select>
+          <span className="text-xs text-muted-foreground">
+            <CalendarClock className="mr-1 inline size-3" />
+            {t('Data updates every 30s when auto-refresh is enabled')}
+          </span>
         </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader className="pb-2">
-                  <Skeleton className="h-4 w-24" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t('Total Detections')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{data?.summary?.total_detections ?? 0}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t('Interceptions')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{data?.summary?.total_interceptions ?? 0}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t('Alerts')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">{data?.summary?.total_alerts ?? 0}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t("Today's Detections")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{data?.summary?.today_detections ?? 0}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {t("Today's Interceptions")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{data?.summary?.today_interceptions ?? 0}</div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {statItems.map((item) => (
+            <SecurityStatCard
+              key={item.title}
+              title={item.title}
+              value={item.value}
+              description={item.description}
+              icon={item.icon}
+              tone={item.tone}
+              loading={loading}
+            />
+          ))}
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Suspense fallback={<ChartSkeleton />}>
             <TopCategoriesChart data={data?.top_categories ?? []} />
           </Suspense>
@@ -192,21 +203,35 @@ export function SecurityDashboardPage() {
           </Suspense>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TopUsersTable data={data?.top_users ?? []} />
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center gap-2">
+              <Bot className="size-4 text-muted-foreground" />
               <CardTitle>{t('Top Models')}</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {data?.top_models?.map((item: any, idx: number) => (
-                  <li key={idx} className="flex justify-between">
-                    <span>{item.model_name}</span>
-                    <span className="font-medium">{item.count}</span>
-                  </li>
-                )) ?? <li className="text-muted-foreground">{t('No data')}</li>}
-              </ul>
+              {data?.top_models?.length ? (
+                <ul className="space-y-2">
+                  {data.top_models.map((item: any, idx: number) => (
+                    <li
+                      key={idx}
+                      className="flex items-center justify-between rounded-lg border px-3 py-2 transition-colors hover:bg-muted/50"
+                    >
+                      <span className="text-sm">{item.model_name}</span>
+                      <span className="text-sm font-medium tabular-nums">{item.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  icon={Bot}
+                  title={t('No Data')}
+                  description={t('No model detection data for the selected period.')}
+                  className="min-h-[180px] rounded-lg border border-dashed"
+                  bordered={false}
+                />
+              )}
             </CardContent>
           </Card>
         </div>
