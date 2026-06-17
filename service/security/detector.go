@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -435,25 +436,33 @@ func maskText(text string, config *MaskConfig) string {
 }
 
 const (
-	hitLogChanSize       = 1000 // 命中日志缓冲通道大小
-	hitLogBatchSize      = 50  // 批量写入阈值
-	hitLogFlushInterval  = 2 * time.Second // 批量写入最大等待时间
+	hitLogChanSize      = 1000            // 命中日志缓冲通道大小
+	hitLogBatchSize     = 50              // 批量写入阈值
+	hitLogFlushInterval = 2 * time.Second // 批量写入最大等待时间
+	hitLogMaxRetries    = 3               // 批量写入失败最大重试次数
 )
 
 var (
 	hitLogChan       chan *model.SecurityHitLog
 	hitLogWorkerOnce sync.Once
+	hitLogWg         sync.WaitGroup
+	droppedHitLogs   atomic.Uint64
 )
 
 // initHitLogWorker 启动命中日志后台 worker（只执行一次）
 func initHitLogWorker() {
 	hitLogWorkerOnce.Do(func() {
 		hitLogChan = make(chan *model.SecurityHitLog, hitLogChanSize)
-		go hitLogWorker()
+		hitLogWg.Add(1)
+		go func() {
+			defer hitLogWg.Done()
+			hitLogWorker()
+		}()
 	})
 }
 
 // hitLogWorker 批量消费命中日志并写入数据库
+// worker 内部每次 select 都 recover，防止单条日志处理 panic 导致整个 worker 退出
 func hitLogWorker() {
 	batch := make([]*model.SecurityHitLog, 0, hitLogBatchSize)
 	ticker := time.NewTicker(hitLogFlushInterval)
@@ -463,27 +472,65 @@ func hitLogWorker() {
 		if len(batch) == 0 {
 			return
 		}
-		if err := model.DB.CreateInBatches(batch, hitLogBatchSize).Error; err != nil {
-			common.SysLog("批量写入安全命中日志失败: " + err.Error())
+		if err := flushHitLogs(batch); err != nil {
+			common.SysLog("批量写入安全命中日志失败（已重试）: " + err.Error())
 		}
 		batch = batch[:0]
 	}
+	defer flush() // 退出前刷新剩余日志
 
 	for {
-		select {
-		case log, ok := <-hitLogChan:
-			if !ok {
+		shouldExit := false
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					common.SysLog(fmt.Sprintf("安全命中日志 worker panic: %v", r))
+				}
+			}()
+
+			select {
+			case log, ok := <-hitLogChan:
+				if !ok {
+					shouldExit = true
+					return
+				}
+				batch = append(batch, log)
+				if len(batch) >= hitLogBatchSize {
+					flush()
+				}
+			case <-ticker.C:
 				flush()
-				return
 			}
-			batch = append(batch, log)
-			if len(batch) >= hitLogBatchSize {
-				flush()
-			}
-		case <-ticker.C:
-			flush()
+		}()
+		if shouldExit {
+			return
 		}
 	}
+}
+
+// flushHitLogs 批量写入命中日志，失败时自动重试
+func flushHitLogs(logs []*model.SecurityHitLog) error {
+	var lastErr error
+	for i := 0; i < hitLogMaxRetries; i++ {
+		if err := model.DB.CreateInBatches(logs, hitLogBatchSize).Error; err != nil {
+			lastErr = err
+			common.SysLog(fmt.Sprintf("批量写入安全命中日志失败（重试 %d/%d）: %v", i+1, hitLogMaxRetries, err))
+			time.Sleep(time.Millisecond * 100 * time.Duration(i+1))
+			continue
+		}
+		return nil
+	}
+	return lastErr
+}
+
+// FlushSecurityHitLogs 安全刷新剩余命中日志，用于服务优雅退出
+func FlushSecurityHitLogs() {
+	if hitLogChan == nil {
+		return
+	}
+	close(hitLogChan)
+	hitLogWg.Wait()
+	hitLogChan = nil
 }
 
 // recordHitLog 异步记录命中日志
@@ -532,10 +579,15 @@ func recordHitLog(userID int, originalContent string, result *DetectionResult, c
 		CreatedAt:           time.Now().Unix(),
 	}
 
+	ch := hitLogChan
+	if ch == nil {
+		return
+	}
 	select {
-	case hitLogChan <- log:
+	case ch <- log:
 	default:
-		common.SysLog("安全命中日志队列已满，丢弃一条日志")
+		dropped := droppedHitLogs.Add(1)
+		common.SysLog(fmt.Sprintf("安全命中日志队列已满，丢弃一条日志（累计丢弃 %d）", dropped))
 	}
 }
 
