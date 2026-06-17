@@ -136,8 +136,20 @@ func SecurityCheckResponse() gin.HandlerFunc {
 			return
 		}
 
-		// 流式响应直接透传，避免整段缓冲破坏实时性
+		// 流式响应使用逐行 SSE 检测 wrapper，避免整段缓冲破坏实时性
 		if c.GetBool("security_stream") {
+			streamWriter := &securityStreamingWriter{
+				ResponseWriter: c.Writer,
+				c:              c,
+				userID:         userId,
+				modelName:      "",
+				logCtx: security.DetectionLogContext{
+					RequestID: c.GetString(common.RequestIdKey),
+					ChannelID: common.GetContextKeyInt(c, constant.ContextKeyChannelId),
+					TokenID:   c.GetInt("token_id"),
+				},
+			}
+			c.Writer = streamWriter
 			c.Next()
 			return
 		}

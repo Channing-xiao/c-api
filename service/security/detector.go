@@ -86,8 +86,18 @@ func GetDetectionEngine() *DetectionEngine {
 	return detectionEngine
 }
 
-// Detect 执行内容检测
+// Detect 执行内容检测（完整检测，包含 AI 引擎）
 func (de *DetectionEngine) Detect(ctx context.Context, userID int, content string, contentType int, modelName string, logCtx DetectionLogContext) (*DetectionResult, error) {
+	return de.detect(ctx, userID, content, contentType, modelName, logCtx, false)
+}
+
+// DetectStreaming 执行流式内容检测（跳过 AI 引擎，避免单 chunk 3 秒超时破坏实时性）
+func (de *DetectionEngine) DetectStreaming(ctx context.Context, userID int, content string, contentType int, modelName string, logCtx DetectionLogContext) (*DetectionResult, error) {
+	return de.detect(ctx, userID, content, contentType, modelName, logCtx, true)
+}
+
+// detect 执行内容检测的内部实现
+func (de *DetectionEngine) detect(ctx context.Context, userID int, content string, contentType int, modelName string, logCtx DetectionLogContext, skipAI bool) (*DetectionResult, error) {
 	result := &DetectionResult{
 		Detected:      false,
 		Action:        constant.SecurityActionPass,
@@ -191,21 +201,23 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 		}
 	}
 
-	// AI 检测（异步，带超时）
-	aiCtx, cancel := context.WithTimeout(ctx, time.Duration(constant.SecurityAITimeoutSeconds)*time.Second)
-	defer cancel()
+	// AI 检测（异步，带超时）——流式场景跳过以保证实时性
+	if !skipAI {
+		aiCtx, cancel := context.WithTimeout(ctx, time.Duration(constant.SecurityAITimeoutSeconds)*time.Second)
+		defer cancel()
 
-	if aiDetector, ok := de.detectors[3].(*AIDetector); ok {
-		aiResult, err := aiDetector.DetectWithContext(aiCtx, content, rules)
-		if err == nil && aiResult.Detected {
-			result.EngineResults[aiDetector.Name()] = aiResult
-			detected = true
-			if aiResult.RiskScore > maxRiskScore {
-				maxRiskScore = aiResult.RiskScore
+		if aiDetector, ok := de.detectors[3].(*AIDetector); ok {
+			aiResult, err := aiDetector.DetectWithContext(aiCtx, content, rules)
+			if err == nil && aiResult.Detected {
+				result.EngineResults[aiDetector.Name()] = aiResult
+				detected = true
+				if aiResult.RiskScore > maxRiskScore {
+					maxRiskScore = aiResult.RiskScore
+				}
+				allMatches = append(allMatches, aiResult.Matches...)
+			} else if err != nil {
+				common.SysLog("AI 检测超时或失败，降级到本地规则: " + err.Error())
 			}
-			allMatches = append(allMatches, aiResult.Matches...)
-		} else if err != nil {
-			common.SysLog("AI 检测超时或失败，降级到本地规则: " + err.Error())
 		}
 	}
 
@@ -249,8 +261,8 @@ func (de *DetectionEngine) Detect(ctx context.Context, userID int, content strin
 	for _, m := range result.Matches {
 		matchRuleIDs = append(matchRuleIDs, m.RuleID)
 	}
-	common.SysLog(fmt.Sprintf("[security] detect user=%d contentLen=%d contentType=%d policies=%d groups=%d rules=%d matches=%d matchRuleIDs=%v action=%d riskScore=%d",
-		userID, len(content), contentType, len(policies), len(effectiveGroupIds), len(rules), len(result.Matches), matchRuleIDs, result.Action, result.RiskScore))
+	common.SysLog(fmt.Sprintf("[security] detect user=%d contentLen=%d contentType=%d policies=%d groups=%d rules=%d matches=%d matchRuleIDs=%v action=%d riskScore=%d skipAI=%v",
+		userID, len(content), contentType, len(policies), len(effectiveGroupIds), len(rules), len(result.Matches), matchRuleIDs, result.Action, result.RiskScore, skipAI))
 
 	// 详细命中诊断日志（记录命中的规则和文本，便于排查误报）
 	for _, m := range result.Matches {
