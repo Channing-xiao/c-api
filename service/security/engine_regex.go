@@ -1,10 +1,9 @@
 package security
 
 import (
+	"container/list"
 	"fmt"
-	"math"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -18,12 +17,13 @@ const regexCacheMaxSize = 1000
 
 type regexCacheEntry struct {
 	re       *regexp2.Regexp
-	lastUsed int64 // UnixNano，用于 LRU 淘汰
+	listElem *list.Element
 }
 
 var (
 	regexCache   = make(map[string]*regexCacheEntry)
-	regexCacheMu sync.RWMutex
+	regexCacheMu sync.Mutex
+	regexLRU     = list.New()
 )
 
 // RegexDetector 正则检测引擎
@@ -32,16 +32,13 @@ type RegexDetector struct{}
 func (rd *RegexDetector) Name() string { return "regex" }
 
 func (rd *RegexDetector) getCompiled(pattern string) (*regexp2.Regexp, error) {
-	regexCacheMu.RLock()
-	entry, ok := regexCache[pattern]
-	regexCacheMu.RUnlock()
-	if ok {
-		// 更新最近使用时间
-		regexCacheMu.Lock()
-		entry.lastUsed = time.Now().UnixNano()
+	regexCacheMu.Lock()
+	if entry, ok := regexCache[pattern]; ok {
+		regexLRU.MoveToFront(entry.listElem)
 		regexCacheMu.Unlock()
 		return entry.re, nil
 	}
+	regexCacheMu.Unlock()
 
 	re, err := regexp2.Compile(pattern, 0)
 	if err != nil {
@@ -51,22 +48,22 @@ func (rd *RegexDetector) getCompiled(pattern string) (*regexp2.Regexp, error) {
 	regexCacheMu.Lock()
 	defer regexCacheMu.Unlock()
 
-	// 缓存达到上限时淘汰最久未使用的条目
+	// 编译期间可能已有其他 goroutine 写入同一 pattern，再次检查避免重复缓存
+	if entry, ok := regexCache[pattern]; ok {
+		regexLRU.MoveToFront(entry.listElem)
+		return entry.re, nil
+	}
+
+	// 缓存达到上限时淘汰最久未使用的条目（O(1) LRU）
 	if len(regexCache) >= regexCacheMaxSize {
-		var oldestKey string
-		var oldestTime int64 = math.MaxInt64
-		for k, v := range regexCache {
-			if v.lastUsed < oldestTime {
-				oldestTime = v.lastUsed
-				oldestKey = k
-			}
-		}
-		if oldestKey != "" {
-			delete(regexCache, oldestKey)
+		if evict := regexLRU.Back(); evict != nil {
+			regexLRU.Remove(evict)
+			delete(regexCache, evict.Value.(string))
 		}
 	}
 
-	regexCache[pattern] = &regexCacheEntry{re: re, lastUsed: time.Now().UnixNano()}
+	elem := regexLRU.PushFront(pattern)
+	regexCache[pattern] = &regexCacheEntry{re: re, listElem: elem}
 	return re, nil
 }
 

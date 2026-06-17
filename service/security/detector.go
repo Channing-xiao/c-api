@@ -432,6 +432,7 @@ func maskText(text string, config *MaskConfig) string {
 		return string(runes[:start]) + strings.Repeat(config.MaskChar, maskLen) + string(runes[length-end:])
 	}
 
+	// 兜底：未知 mask_type 按 full 处理
 	return "***"
 }
 
