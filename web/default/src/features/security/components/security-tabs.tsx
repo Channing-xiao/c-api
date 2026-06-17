@@ -10,12 +10,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const tabs = [
-  { key: 'dashboard', label: 'Dashboard', path: '/security', icon: LayoutDashboard },
   { key: 'groups', label: 'Groups', path: '/security/groups', icon: FolderOpen },
   { key: 'rules', label: 'Rules', path: '/security/rules', icon: FileText },
   { key: 'policies', label: 'Policies', path: '/security/policies', icon: ShieldCheck },
   { key: 'logs', label: 'Audit Logs', path: '/security/logs', icon: ScrollText },
-]
+  { key: 'dashboard', label: 'Dashboard', path: '/security', icon: LayoutDashboard },
+].sort((a, b) => b.path.length - a.path.length)
 
 export function SecurityTabs() {
   const { t } = useTranslation()

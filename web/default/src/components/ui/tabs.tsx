@@ -78,8 +78,9 @@ function TabsList({
 
   const updateIndicator = useCallback(() => {
     if (variant !== 'line') return
+    // Base UI sets data-active as a present-but-empty attribute, not "true".
     const activeTrigger = listRef.current?.querySelector(
-      '[data-active="true"]'
+      '[data-active]'
     ) as HTMLElement | null
     if (!activeTrigger) return
     setIndicatorStyle({
