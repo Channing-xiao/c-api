@@ -52,7 +52,7 @@ func TestApplyMasking(t *testing.T) {
 
 	// 验证乱序 matches 也能正确替换
 	matches2 := []*dto.SecurityMatchResult{
-		{RuleID: 1, Position: [2]int{13, 24}},
+		{RuleID: 1, Position: [2]int{22, 33}},
 		{RuleID: 1, Position: [2]int{0, 11}},
 	}
 	result2 := applyMasking("13800138000 请联系 13800138000", matches2, rules)
@@ -98,7 +98,7 @@ func TestApplyMaskingWithCustomConfig(t *testing.T) {
 		ExtraConfig: `{"mask_type":"preserve","preserve_start":6,"preserve_end":4,"mask_char":"*"}`,
 	}}
 	matches := []*dto.SecurityMatchResult{
-		{RuleID: 1, Position: [2]int{7, 25}},
+		{RuleID: 1, Position: [2]int{10, 28}},
 	}
 
 	result := applyMasking("身份证 110101199001011234 请查收", matches, rules)
