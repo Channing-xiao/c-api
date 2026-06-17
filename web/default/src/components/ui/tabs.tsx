@@ -93,7 +93,17 @@ function TabsList({
     if (variant !== 'line') return
     // Defer measurement to the next animation frame so Base UI has
     // finished updating the data-active attribute after value changes.
-    const rafId = requestAnimationFrame(updateIndicator)
+    // Also re-measure after fonts are ready to avoid FOUT/FOIT misalignment.
+    let rafId: number
+    const measure = () => {
+      rafId = requestAnimationFrame(() => {
+        updateIndicator()
+        if (typeof document !== 'undefined' && 'fonts' in document) {
+          document.fonts.ready.then(updateIndicator)
+        }
+      })
+    }
+    measure()
     return () => cancelAnimationFrame(rafId)
   }, [variant, value, updateIndicator])
 
