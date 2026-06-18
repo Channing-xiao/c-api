@@ -7,6 +7,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/service/security"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -146,10 +149,34 @@ func TestExtractContentFromResponse_Delta(t *testing.T) {
 	require.Equal(t, "stream chunk", content)
 }
 
-func TestReplaceContentInRequest(t *testing.T) {
+func TestReplaceMaskedRequest_ContentBlocks(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"请联系 13800138000"}]}]}`)
+	result := &security.DetectionResult{
+		Detected: true,
+		Action:   constant.SecurityActionMask,
+		Matches: []*dto.SecurityMatchResult{
+			{RuleID: 1, MatchedText: "13800138000", Position: [2]int{10, 21}},
+		},
+	}
+	newBody, ok := replaceMaskedRequest(body, result)
+	require.True(t, ok)
+	require.Contains(t, string(newBody), `"text":"请联系 ***"`)
+	require.NotContains(t, string(newBody), "13800138000")
+}
+
+func TestReplaceMaskedRequest_StringContent(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"user","content":"请联系 13800138000"}]}`)
-	newBody := replaceContentInRequest(body, "请联系 13800138000", "请联系 1*********0")
-	require.Contains(t, string(newBody), "1*********0")
+	result := &security.DetectionResult{
+		Detected: true,
+		Action:   constant.SecurityActionMask,
+		Matches: []*dto.SecurityMatchResult{
+			{RuleID: 1, MatchedText: "13800138000", Position: [2]int{10, 21}},
+		},
+	}
+	newBody, ok := replaceMaskedRequest(body, result)
+	require.True(t, ok)
+	require.Contains(t, string(newBody), `"content":"请联系 ***"`)
+	require.NotContains(t, string(newBody), "13800138000")
 }
 
 func TestReplaceContentInResponse(t *testing.T) {

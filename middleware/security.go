@@ -315,7 +315,7 @@ func replaceContentInRequest(body []byte, oldContent, newContent string) []byte 
 }
 
 // replaceMaskedRequest 将 Mask 后的内容按消息粒度写回请求体，保留所有其他字段
-// 仅处理最后一条 user 消息，与 extractContentFromRequest 的检测范围保持一致
+// 支持 OpenAI/Claude 字符串 content 以及 Claude content blocks 数组格式
 func replaceMaskedRequest(body []byte, result *security.DetectionResult) ([]byte, bool) {
 	if !result.Detected || result.Action != constant.SecurityActionMask || len(result.Matches) == 0 {
 		return body, false
@@ -334,42 +334,90 @@ func replaceMaskedRequest(body []byte, result *security.DetectionResult) ([]byte
 
 	// 找到最后一条 user 消息
 	var lastUserIndex = -1
-	var lastUserContent string
+	var lastUserMsg map[string]json.RawMessage
 	for i := len(messages) - 1; i >= 0; i-- {
-		var msg struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		}
-		if err := common.Unmarshal(messages[i], &msg); err != nil {
+		var msgMap map[string]json.RawMessage
+		if err := common.Unmarshal(messages[i], &msgMap); err != nil {
 			continue
 		}
-		if msg.Role == "user" && msg.Content != "" {
+		role := ""
+		if r, ok := msgMap["role"]; ok {
+			common.Unmarshal(r, &role)
+		}
+		if role == "user" {
 			lastUserIndex = i
-			lastUserContent = msg.Content
+			lastUserMsg = msgMap
 			break
 		}
 	}
 
-	if lastUserIndex < 0 || lastUserContent == "" {
+	if lastUserIndex < 0 || lastUserMsg == nil {
 		return body, false
 	}
 
-	masked := security.ApplyMasking(lastUserContent, result.Matches, nil)
-	if masked == lastUserContent {
+	contentRaw, ok := lastUserMsg["content"]
+	if !ok {
 		return body, false
 	}
 
-	var msgMap map[string]json.RawMessage
-	if err := common.Unmarshal(messages[lastUserIndex], &msgMap); err != nil {
+	var masked string
+	var modified bool
+
+	// 情况 1：content 是字符串
+	var contentStr string
+	if err := common.Unmarshal(contentRaw, &contentStr); err == nil && contentStr != "" {
+		masked = security.ApplyMasking(contentStr, result.Matches, nil)
+		if masked != contentStr {
+			modified = true
+			contentBytes, _ := common.Marshal(masked)
+			lastUserMsg["content"] = contentBytes
+		}
+	} else {
+		// 情况 2：content 是 Claude content blocks 数组
+		var blocks []map[string]interface{}
+		if err := common.Unmarshal(contentRaw, &blocks); err == nil && len(blocks) > 0 {
+			var texts []string
+			for _, block := range blocks {
+				if block["type"] == "text" {
+					if text, ok := block["text"].(string); ok {
+						texts = append(texts, text)
+					}
+				}
+			}
+			if len(texts) > 0 {
+				concatenated := strings.Join(texts, "\n")
+				masked = security.ApplyMasking(concatenated, result.Matches, nil)
+				if masked != concatenated {
+					modified = true
+					// 将所有 text block 合并为一个包含脱敏后文本的 block
+					newBlocks := make([]map[string]interface{}, 0, len(blocks))
+					for _, block := range blocks {
+						if block["type"] != "text" {
+							newBlocks = append(newBlocks, block)
+						}
+					}
+					newBlocks = append(newBlocks, map[string]interface{}{
+						"type": "text",
+						"text": masked,
+					})
+					contentBytes, err := common.Marshal(newBlocks)
+					if err != nil {
+						common.SysLog("脱敏 content blocks 编码失败: " + err.Error())
+						return body, false
+					}
+					lastUserMsg["content"] = json.RawMessage(contentBytes)
+				}
+			}
+		}
+	}
+
+	if !modified {
 		return body, false
 	}
-	contentBytes, err := common.Marshal(masked)
+
+	newMsg, err := common.Marshal(lastUserMsg)
 	if err != nil {
-		return body, false
-	}
-	msgMap["content"] = contentBytes
-	newMsg, err := common.Marshal(msgMap)
-	if err != nil {
+		common.SysLog("脱敏后重新编码消息失败: " + err.Error())
 		return body, false
 	}
 	messages[lastUserIndex] = newMsg
