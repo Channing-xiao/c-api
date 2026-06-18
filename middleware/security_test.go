@@ -105,10 +105,33 @@ func TestExtractContentFromRequest(t *testing.T) {
 	require.Equal(t, "hello world", content)
 }
 
-func TestExtractContentFromRequest_Empty(t *testing.T) {
-	body := []byte(`{"model":"gpt-4"}`)
+func TestExtractContentFromRequest_ClaudeContentBlocks(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hello world"},{"type":"image","source":{"type":"base64","data":"..."}}]}]}`)
 	content := extractContentFromRequest(body)
-	require.Equal(t, "", content)
+	require.Equal(t, "hello world", content)
+}
+
+func TestExtractContentFromRequest_ClaudeSystem(t *testing.T) {
+	body := []byte(`{"system":"system prompt","messages":[{"role":"user","content":[{"type":"text","text":"hi"}]}]}`)
+	content := extractContentFromRequest(body)
+	require.Equal(t, "hi", content)
+}
+
+func TestExtractContentFromRequest_EmptyUserFallbackToSystem(t *testing.T) {
+	body := []byte(`{"system":"sensitive system instruction","messages":[{"role":"assistant","content":"ok"}]}`)
+	content := extractContentFromRequest(body)
+	require.Equal(t, "sensitive system instruction", content)
+}
+
+func TestExtractTextFromContent(t *testing.T) {
+	require.Equal(t, "hello", extractTextFromContent("hello"))
+	require.Equal(t, "hello\n world", extractTextFromContent([]interface{}{
+		map[string]interface{}{"type": "text", "text": "hello"},
+		map[string]interface{}{"type": "text", "text": " world"},
+	}))
+	require.Equal(t, "", extractTextFromContent([]interface{}{
+		map[string]interface{}{"type": "image", "source": "..."},
+	}))
 }
 
 func TestExtractContentFromResponse(t *testing.T) {

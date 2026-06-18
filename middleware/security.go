@@ -544,12 +544,13 @@ func isChatCompletionEndpoint(path string) bool {
 }
 
 // extractContentFromRequest 从请求体中提取最后一条用户消息内容
-// 仅检测当前用户输入，避免历史消息中的已检测内容导致重复误报
+// 支持 OpenAI / Claude 的字符串 content 以及 Claude 的 content blocks 数组格式
 func extractContentFromRequest(body []byte) string {
 	var req struct {
+		System   string `json:"system"`
 		Messages []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
+			Role    string      `json:"role"`
+			Content interface{} `json:"content"`
 		} `json:"messages"`
 	}
 
@@ -559,11 +560,46 @@ func extractContentFromRequest(body []byte) string {
 
 	// 只取最后一条 role=user 的消息，避免历史消息重复触发拦截
 	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role == "user" && req.Messages[i].Content != "" {
-			return req.Messages[i].Content
+		if req.Messages[i].Role == "user" {
+			text := extractTextFromContent(req.Messages[i].Content)
+			if text != "" {
+				return text
+			}
 		}
 	}
 
+	// Claude 顶层 system 字段也可能包含敏感指令
+	if req.System != "" {
+		return req.System
+	}
+
+	return ""
+}
+
+// extractTextFromContent 从 message content 中提取文本
+// 支持 string 和 Claude content blocks [{"type":"text","text":"..."}]
+func extractTextFromContent(content interface{}) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		var texts []string
+		for _, item := range v {
+			block, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if block["type"] != "text" {
+				continue
+			}
+			text, ok := block["text"].(string)
+			if !ok || text == "" {
+				continue
+			}
+			texts = append(texts, text)
+		}
+		return strings.Join(texts, "\n")
+	}
 	return ""
 }
 
