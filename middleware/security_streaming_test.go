@@ -15,30 +15,51 @@ import (
 
 func TestExtractStreamContent_OpenAI(t *testing.T) {
 	data := []byte(`{"choices":[{"index":0,"delta":{"content":"hello world"}}]}`)
-	require.Equal(t, "hello world", extractStreamContent(data))
+	content, reasoning := extractStreamContent(data)
+	require.Equal(t, "hello world", content)
+	require.Equal(t, "", reasoning)
+}
+
+func TestExtractStreamContent_OpenAIReasoning(t *testing.T) {
+	data := []byte(`{"choices":[{"index":0,"delta":{"content":"","reasoning_content":"think"}}]}`)
+	content, reasoning := extractStreamContent(data)
+	require.Equal(t, "", content)
+	require.Equal(t, "think", reasoning)
 }
 
 func TestExtractStreamContent_Claude(t *testing.T) {
 	data := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello world"}}`)
-	require.Equal(t, "hello world", extractStreamContent(data))
+	content, reasoning := extractStreamContent(data)
+	require.Equal(t, "hello world", content)
+	require.Equal(t, "", reasoning)
 }
 
 func TestExtractStreamContent_Empty(t *testing.T) {
 	data := []byte(`{"choices":[{"index":0,"delta":{}}]}`)
-	require.Equal(t, "", extractStreamContent(data))
+	content, reasoning := extractStreamContent(data)
+	require.Equal(t, "", content)
+	require.Equal(t, "", reasoning)
 }
 
 func TestReplaceStreamContent_OpenAI(t *testing.T) {
 	data := []byte(`{"choices":[{"index":0,"delta":{"content":"请联系 13800138000"}}]}`)
-	newData, ok := replaceStreamContent(data, "请联系 ***")
+	newData, ok := replaceStreamContent(data, "请联系 ***", "")
 	require.True(t, ok)
 	require.Contains(t, string(newData), `"content":"请联系 ***"`)
 	require.NotContains(t, string(newData), "13800138000")
 }
 
+func TestReplaceStreamContent_OpenAIReasoning(t *testing.T) {
+	data := []byte(`{"choices":[{"index":0,"delta":{"content":"","reasoning_content":"请联系 13800138000"}}]}`)
+	newData, ok := replaceStreamContent(data, "", "请联系 ***")
+	require.True(t, ok)
+	require.Contains(t, string(newData), `"reasoning_content":"请联系 ***"`)
+	require.NotContains(t, string(newData), "13800138000")
+}
+
 func TestReplaceStreamContent_Claude(t *testing.T) {
 	data := []byte(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"请联系 13800138000"}}`)
-	newData, ok := replaceStreamContent(data, "请联系 ***")
+	newData, ok := replaceStreamContent(data, "请联系 ***", "")
 	require.True(t, ok)
 	require.Contains(t, string(newData), `"text":"请联系 ***"`)
 	require.NotContains(t, string(newData), "13800138000")

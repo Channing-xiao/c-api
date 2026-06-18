@@ -77,8 +77,8 @@ func (w *securityStreamingWriter) processLine(line []byte) error {
 		return err
 	}
 
-	content := extractStreamContent(data)
-	if content == "" {
+	content, reasoning := extractStreamContent(data)
+	if content == "" && reasoning == "" {
 		_, err := w.ResponseWriter.Write(line)
 		return err
 	}
@@ -87,34 +87,72 @@ func (w *securityStreamingWriter) processLine(line []byte) error {
 	if detect == nil {
 		detect = security.GetDetectionEngine().DetectStreaming
 	}
-	result, err := detect(
-		context.Background(),
-		w.userID,
-		content,
-		constant.SecurityContentTypeResponse,
-		w.modelName,
-		w.logCtx,
+
+	// 分别检测 content 和 reasoning_content，各自应用动作
+	var (
+		newContent        = content
+		newReasoning      = reasoning
+		modified          bool
+		overallAction     = constant.SecurityActionPass
+		overallContentLen int
+		overallMatches    int
+		hit               bool
 	)
-	if err != nil {
-		common.SysLog("流式响应安全检测错误: " + err.Error())
-		_, err := w.ResponseWriter.Write(line)
-		return err
+
+	check := func(text string) (string, bool) {
+		if text == "" {
+			return text, false
+		}
+		result, err := detect(
+			context.Background(),
+			w.userID,
+			text,
+			constant.SecurityContentTypeResponse,
+			w.modelName,
+			w.logCtx,
+		)
+		if err != nil {
+			common.SysLog("流式响应安全检测错误: " + err.Error())
+			return text, false
+		}
+		if !result.Detected {
+			return text, false
+		}
+		if result.Action > overallAction {
+			overallAction = result.Action
+		}
+		overallContentLen += len(text)
+		overallMatches += len(result.Matches)
+		if result.Action == constant.SecurityActionMask {
+			return result.ProcessedContent, true
+		}
+		return text, true
 	}
 
-	if !result.Detected {
-		_, err := w.ResponseWriter.Write(line)
-		return err
+	if content != "" {
+		newContent, hit = check(content)
+		if hit {
+			modified = true
+		}
+	}
+	if reasoning != "" {
+		newReasoning, hit = check(reasoning)
+		if hit {
+			modified = true
+		}
 	}
 
-	common.SysLog(fmt.Sprintf("[security:stream] user=%d detected=%v action=%d contentLen=%d matches=%d",
-		w.userID, result.Detected, result.Action, len(content), len(result.Matches)))
+	if modified {
+		common.SysLog(fmt.Sprintf("[security:stream] user=%d detected=true action=%d contentLen=%d matches=%d",
+			w.userID, overallAction, overallContentLen, overallMatches))
+	}
 
-	switch result.Action {
+	switch overallAction {
 	case constant.SecurityActionPass, constant.SecurityActionAlert:
 		_, err := w.ResponseWriter.Write(line)
 		return err
 	case constant.SecurityActionMask:
-		newData, ok := replaceStreamContent(data, result.ProcessedContent)
+		newData, ok := replaceStreamContent(data, newContent, newReasoning)
 		if !ok {
 			common.SysLog("流式响应 Mask 替换未生效")
 			_, err := w.ResponseWriter.Write(line)
@@ -144,12 +182,13 @@ func (w *securityStreamingWriter) writeBlockFrame() error {
 }
 
 // extractStreamContent 从 SSE data 负载中提取文本内容
-// 支持 OpenAI chat.completions delta.content 与 Claude delta.text
-func extractStreamContent(data []byte) string {
+// 支持 OpenAI chat.completions delta.content / delta.reasoning_content 与 Claude delta.text
+func extractStreamContent(data []byte) (content string, reasoning string) {
 	var payload struct {
 		Choices []struct {
 			Delta struct {
-				Content string `json:"content"`
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
 			} `json:"delta"`
 		} `json:"choices"`
 		Delta struct {
@@ -157,30 +196,37 @@ func extractStreamContent(data []byte) string {
 		} `json:"delta"`
 	}
 	if err := common.Unmarshal(data, &payload); err != nil {
-		return ""
+		return "", ""
 	}
 	if len(payload.Choices) > 0 {
-		return payload.Choices[0].Delta.Content
+		return payload.Choices[0].Delta.Content, payload.Choices[0].Delta.ReasoningContent
 	}
-	return payload.Delta.Text
+	return payload.Delta.Text, ""
 }
 
 // replaceStreamContent 将 SSE data 负载中的文本替换为脱敏后内容
-func replaceStreamContent(data []byte, replacement string) ([]byte, bool) {
+func replaceStreamContent(data []byte, content, reasoning string) ([]byte, bool) {
 	var payload map[string]interface{}
 	if err := common.Unmarshal(data, &payload); err != nil {
 		return nil, false
 	}
 
-	// OpenAI 格式：choices[0].delta.content
+	// OpenAI 格式：choices[0].delta.content / reasoning_content
 	if choicesRaw, ok := payload["choices"].([]interface{}); ok && len(choicesRaw) > 0 {
 		if choice, ok := choicesRaw[0].(map[string]interface{}); ok {
 			if delta, ok := choice["delta"].(map[string]interface{}); ok {
-				if _, ok := delta["content"]; ok {
-					delta["content"] = replacement
-					newData, err := common.Marshal(payload)
-					return newData, err == nil
+				if content != "" {
+					if _, ok := delta["content"]; ok {
+						delta["content"] = content
+					}
 				}
+				if reasoning != "" {
+					if _, ok := delta["reasoning_content"]; ok {
+						delta["reasoning_content"] = reasoning
+					}
+				}
+				newData, err := common.Marshal(payload)
+				return newData, err == nil
 			}
 		}
 	}
@@ -188,7 +234,7 @@ func replaceStreamContent(data []byte, replacement string) ([]byte, bool) {
 	// Claude 格式：delta.text
 	if delta, ok := payload["delta"].(map[string]interface{}); ok {
 		if _, ok := delta["text"]; ok {
-			delta["text"] = replacement
+			delta["text"] = content
 			newData, err := common.Marshal(payload)
 			return newData, err == nil
 		}
