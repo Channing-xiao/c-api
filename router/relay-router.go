@@ -63,6 +63,7 @@ func SetRelayRouter(router *gin.Engine) {
 	playgroundRouter.Use(middleware.RouteTag("relay"))
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
 	playgroundRouter.Use(middleware.UserAuth(), middleware.Distribute())
+	playgroundRouter.Use(middleware.SecurityCheck(), middleware.SecurityCheckResponse())
 	{
 		playgroundRouter.POST("/chat/completions", controller.Playground)
 	}
@@ -83,6 +84,8 @@ func SetRelayRouter(router *gin.Engine) {
 		//http router
 		httpRouter := relayV1Router.Group("")
 		httpRouter.Use(middleware.Distribute())
+		httpRouter.Use(middleware.SecurityCheck())
+		httpRouter.Use(middleware.SecurityCheckResponse())
 
 		// claude related routes
 		httpRouter.POST("/messages", func(c *gin.Context) {

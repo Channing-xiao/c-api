@@ -28,6 +28,7 @@ import {
   MessageSquare,
   Radio,
   Settings,
+  ShieldAlert,
   Ticket,
   User,
   Users,
@@ -140,6 +141,12 @@ export function useSidebarData(): SidebarData {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Security'),
+            url: '/security',
+            activeUrls: ['/security', '/security/*'],
+            icon: ShieldAlert,
           },
           {
             title: t('System Settings'),
