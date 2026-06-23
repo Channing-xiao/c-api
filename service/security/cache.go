@@ -1,0 +1,160 @@
+package security
+
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
+)
+
+const (
+	SecurityRuleCacheKey    = "security:rules:group:%d"
+	SecurityPolicyCacheKey  = "security:policies:user:%d"
+	SecurityCacheExpiration = 5 * time.Minute
+)
+
+type cacheItem[T any] struct {
+	data      T
+	expiredAt int64
+}
+
+var (
+	securityRuleCache   map[string]cacheItem[[]*model.SecurityRule]
+	securityPolicyCache map[string]cacheItem[[]*model.SecurityPolicyWithGroup]
+	securityCacheMutex  sync.RWMutex
+)
+
+func init() {
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
+}
+
+// GetCachedRulesByGroupIds 从缓存获取规则（先查内存，再查数据库；缓存带 TTL）
+func GetCachedRulesByGroupIds(groupIds []int64) ([]*model.SecurityRule, error) {
+	if len(groupIds) == 0 {
+		return nil, nil
+	}
+
+	var allRules []*model.SecurityRule
+	var missingGroupIds []int64
+	now := time.Now().Unix()
+
+	// 尝试从缓存获取
+	securityCacheMutex.RLock()
+	for _, gid := range groupIds {
+		key := fmt.Sprintf(SecurityRuleCacheKey, gid)
+		if item, ok := securityRuleCache[key]; ok && item.expiredAt > now {
+			allRules = append(allRules, item.data...)
+		} else {
+			missingGroupIds = append(missingGroupIds, gid)
+		}
+	}
+	securityCacheMutex.RUnlock()
+
+	// 从数据库加载缺失的规则
+	if len(missingGroupIds) > 0 {
+		dbRules, err := GetActiveRulesByGroupIds(missingGroupIds)
+		if err != nil {
+			return nil, err
+		}
+
+		// 按分组存入缓存
+		groupRuleMap := make(map[int64][]*model.SecurityRule)
+		for _, rule := range dbRules {
+			groupRuleMap[rule.GroupID] = append(groupRuleMap[rule.GroupID], rule)
+		}
+
+		securityCacheMutex.Lock()
+		expireAt := time.Now().Add(SecurityCacheExpiration).Unix()
+		for gid, rules := range groupRuleMap {
+			key := fmt.Sprintf(SecurityRuleCacheKey, gid)
+			securityRuleCache[key] = cacheItem[[]*model.SecurityRule]{
+				data:      rules,
+				expiredAt: expireAt,
+			}
+			allRules = append(allRules, rules...)
+		}
+		securityCacheMutex.Unlock()
+	}
+
+	return allRules, nil
+}
+
+// GetCachedUserPolicies 从缓存获取用户策略（带 TTL）
+func GetCachedUserPolicies(userID int) ([]*model.SecurityPolicyWithGroup, error) {
+	key := fmt.Sprintf(SecurityPolicyCacheKey, userID)
+	now := time.Now().Unix()
+
+	securityCacheMutex.RLock()
+	if item, ok := securityPolicyCache[key]; ok && item.expiredAt > now {
+		securityCacheMutex.RUnlock()
+		return item.data, nil
+	}
+	securityCacheMutex.RUnlock()
+
+	// 从数据库加载
+	policies, err := GetUserPolicies(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	securityCacheMutex.Lock()
+	securityPolicyCache[key] = cacheItem[[]*model.SecurityPolicyWithGroup]{
+		data:      policies,
+		expiredAt: time.Now().Add(SecurityCacheExpiration).Unix(),
+	}
+	securityCacheMutex.Unlock()
+
+	return policies, nil
+}
+
+// InvalidateRuleCache 使规则缓存失效
+func InvalidateRuleCache() {
+	securityCacheMutex.Lock()
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
+	securityCacheMutex.Unlock()
+	common.SysLog("安全规则缓存已清空")
+}
+
+// InvalidatePolicyCache 使策略缓存失效
+func InvalidatePolicyCache() {
+	securityCacheMutex.Lock()
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
+	securityCacheMutex.Unlock()
+	common.SysLog("安全策略缓存已清空")
+}
+
+// InvalidateAllSecurityCache 使所有安全缓存失效
+func InvalidateAllSecurityCache() {
+	securityCacheMutex.Lock()
+	securityRuleCache = make(map[string]cacheItem[[]*model.SecurityRule])
+	securityPolicyCache = make(map[string]cacheItem[[]*model.SecurityPolicyWithGroup])
+	securityCacheMutex.Unlock()
+	common.SysLog("所有安全缓存已清空")
+}
+
+// IsSecurityEnabled 检查安全模块是否启用
+func IsSecurityEnabled() bool {
+	return common.GetEnvOrDefaultString(constant.SecurityEnvEnabled, "true") == "true"
+}
+
+// GetSecurityStatus 获取安全模块状态
+func GetSecurityStatus() (*dto.SecurityStatusResponse, error) {
+	var groupCount, ruleCount, policyCount int64
+
+	model.DB.Model(&model.SecurityGroup{}).Where("status = ?", constant.SecurityStatusEnabled).Count(&groupCount)
+	model.DB.Model(&model.SecurityRule{}).Where("status = ?", constant.SecurityStatusEnabled).Count(&ruleCount)
+	model.DB.Model(&model.SecurityUserPolicy{}).Where("status = ?", constant.SecurityStatusEnabled).Count(&policyCount)
+
+	return &dto.SecurityStatusResponse{
+		Enabled:      IsSecurityEnabled(),
+		RuleCount:    ruleCount,
+		GroupCount:   groupCount,
+		PolicyCount:  policyCount,
+		CacheEnabled: true,
+	}, nil
+}
