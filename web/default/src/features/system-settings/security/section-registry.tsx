@@ -16,6 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Link } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
+import { ShieldCheck } from 'lucide-react'
 import { RateLimitSection } from '../request-limits/rate-limit-section'
 import { SensitiveWordsSection } from '../request-limits/sensitive-words-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
@@ -52,6 +56,11 @@ const SECURITY_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'ai-content-security',
+    titleKey: 'AI Content Security',
+    build: () => <AIContentSecurityLink />,
   },
   {
     id: 'ssrf',
@@ -96,3 +105,20 @@ export const SECURITY_DEFAULT_SECTION = securityRegistry.defaultSection
 export const getSecuritySectionNavItems = securityRegistry.getSectionNavItems
 export const getSecuritySectionContent = securityRegistry.getSectionContent
 export const getSecuritySectionMeta = securityRegistry.getSectionMeta
+
+function AIContentSecurityLink() {
+  const { t } = useTranslation()
+  return (
+    <div className='space-y-4'>
+      <p className='text-muted-foreground text-sm'>
+        {t('Advanced AI-powered content security detection with keyword, regex, NER and AI rules.')}
+      </p>
+      <Button asChild>
+        <Link to='/ai-security'>
+          <ShieldCheck className='mr-1.5 size-4' />
+          {t('Open AI Content Security')}
+        </Link>
+      </Button>
+    </div>
+  )
+}

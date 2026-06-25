@@ -58,6 +58,7 @@ export default defineConfig(({ envMode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        '@custom': path.resolve(__dirname, '../../custom'),
       },
     },
     html: {

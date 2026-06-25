@@ -1,6 +1,7 @@
 package router
 
 import (
+	ai_security "github.com/QuantumNous/new-api/custom/ai-security"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 
@@ -456,6 +457,12 @@ func SetApiRouter(router *gin.Engine) {
 			// Detection endpoints (admin only)
 			securityRoute.POST("/check/request", middleware.AdminAuth(), controller.CheckSecurityRequest)
 			securityRoute.POST("/check/response", middleware.AdminAuth(), controller.CheckSecurityResponse)
+		}
+		// ai-security 模块独立路由（与官方 /security 完全解耦）
+		aiSecurityRoute := apiRouter.Group("/ai-security")
+		aiSecurityRoute.Use(middleware.AdminAuth())
+		{
+			ai_security.RegisterRoutes(aiSecurityRoute)
 		}
 	}
 }

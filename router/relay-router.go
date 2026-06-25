@@ -1,6 +1,7 @@
 package router
 
 import (
+	ai_security "github.com/QuantumNous/new-api/custom/ai-security"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
@@ -84,8 +85,12 @@ func SetRelayRouter(router *gin.Engine) {
 		//http router
 		httpRouter := relayV1Router.Group("")
 		httpRouter.Use(middleware.Distribute())
+		// 检测链路顺序遵循 ai-security 开发文档：官方 sensitive-words 基础检测在前，
+		// ai-security 高级检测在其后；响应同理（模型响应 → ai-security 响应检测 → 返回用户）。
 		httpRouter.Use(middleware.SecurityCheck())
 		httpRouter.Use(middleware.SecurityCheckResponse())
+		httpRouter.Use(ai_security.CheckRequest())
+		httpRouter.Use(ai_security.CheckResponse())
 
 		// claude related routes
 		httpRouter.POST("/messages", func(c *gin.Context) {

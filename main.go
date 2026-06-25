@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	ai_security "github.com/QuantumNous/new-api/custom/ai-security"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
@@ -361,6 +362,11 @@ func InitResources() error {
 	if err != nil {
 		common.SysError("failed to load custom OAuth providers: " + err.Error())
 		// Don't return error, custom OAuth is not critical
+	}
+
+	// Initialize ai-security module
+	if err := ai_security.Init(); err != nil {
+		common.SysError("ai-security init failed: " + err.Error())
 	}
 
 	return nil
