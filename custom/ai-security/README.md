@@ -160,6 +160,87 @@ git push new-api feature/ai-content-security
 
 如果使用了 rebase 且远端已存在旧提交，则可能需要 `--force-with-lease` 强推。
 
+## Docker 部署
+
+### 注意：docker-compose.yml 默认指向官方镜像
+
+项目根目录的 `docker-compose.yml` 第 19 行默认使用：
+
+```yaml
+image: calciumion/new-api:latest
+```
+
+这是 QuantumNous/new-api 官方发布到 Docker Hub 的预编译镜像，**不包含你的 ai-security 模块**。要部署你自己的分支，需要改用本地构建。
+
+### 方案 A：服务器本地构建（推荐）
+
+在服务器上克隆你自己的仓库并切换到对应分支：
+
+```bash
+git clone -b feature/ai-content-security https://github.com/Channing-xiao/c-api.git
+cd c-api
+```
+
+修改 `docker-compose.yml`，将 `new-api` 服务从拉取镜像改为本地构建：
+
+```yaml
+services:
+  new-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: new-api:local
+    container_name: new-api
+```
+
+启动：
+
+```bash
+docker compose up -d --build
+```
+
+`Dockerfile` 会通过 `COPY . .` 把当前目录源码（含 `custom/ai-security/`）打包进镜像，并自动完成前端构建、Go 编译。
+
+### 方案 B：先构建镜像再推送仓库
+
+如果你有多台服务器，不想每台都重新构建：
+
+```bash
+git clone -b feature/ai-content-security https://github.com/Channing-xiao/c-api.git
+cd c-api
+docker build -t your-dockerhub-username/new-api:ai-security .
+docker push your-dockerhub-username/new-api:ai-security
+```
+
+然后在服务器 `docker-compose.yml` 中改为：
+
+```yaml
+services:
+  new-api:
+    image: your-dockerhub-username/new-api:ai-security
+```
+
+### 不需要修改的地方
+
+| 项目 | 是否需修改 | 原因 |
+|---|---|---|
+| `Dockerfile` 里的 `github.com/QuantumNous/new-api/common.Version` | 否 | 这是 Go 模块路径，用于编译时注入版本号，不是 Git 仓库地址 |
+| `go.mod` 里的 `module github.com/QuantumNous/new-api` | 否 | 整个项目的 import 路径都基于该模块名 |
+| `ENTRYPOINT ["/new-api"]` | 否 | 本模块未修改入口，且开发文档要求不动 Docker ENTRYPOINT |
+| `Dockerfile.dev` / `docker-compose.dev.yml` | 可选 | 开发版默认就是从本地源码构建，可直接使用 |
+
+### 数据库配置
+
+`docker-compose.yml` 默认使用 PostgreSQL，并通过 `SQL_DSN` 连接。生产环境务必修改默认密码：
+
+```yaml
+environment:
+  - SQL_DSN=postgresql://root:YOUR_PASSWORD@postgres:5432/new-api
+  - REDIS_CONN_STRING=redis://:YOUR_PASSWORD@redis:6379
+```
+
+如果使用 MySQL，请按 `docker-compose.yml` 内注释切换对应的服务和 `SQL_DSN`。
+
 ## 开发说明
 
 - 后端使用 Go + Gin + GORM。
