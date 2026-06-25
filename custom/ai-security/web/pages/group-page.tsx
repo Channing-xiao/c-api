@@ -9,8 +9,8 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/empty-state'
 import { aiSecurityApi, type AISecurityGroup } from '../api/ai-security'
-import { AISecurityLayout } from './ai-security-layout'
-import { GroupFormModal } from './group-form-modal'
+import { AISecurityLayout } from '../components/ai-security-layout'
+import { GroupFormModal } from '../components/group-form-modal'
 
 export function AISecurityGroupPage() {
   const { t } = useTranslation()
